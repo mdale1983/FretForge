@@ -59,6 +59,19 @@ export async function getMostRecentProject(): Promise<Project | null> {
 }
 
 export async function setActiveProject(projectId: number) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE projects
+    SET updated_at = ?
+    WHERE id = ?
+    `,
+    [now, projectId]
+  );
+
   await setAppState("active_project_id", String(projectId));
 }
 
