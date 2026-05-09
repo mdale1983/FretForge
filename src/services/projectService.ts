@@ -132,6 +132,14 @@ export async function deleteProject(projectId: number) {
 
   await db.execute(
     `
+    DELETE FROM sessions
+    WHERE project_id = ?
+    `,
+    [projectId]
+  );
+
+  await db.execute(
+    `
     DELETE FROM projects
     WHERE id = ?
     `,

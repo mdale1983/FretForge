@@ -7,7 +7,7 @@ import {
   getProjects,
   renameProject,
   setActiveProject,
-} from "../services/ProjectService";
+} from "../services/projectService";
 
 type ProjectPanelProps = {
   theme: string;
@@ -289,19 +289,13 @@ function ProjectPanel({
                             {project.name}
                           </span>
 
-                          <span
-  className={`text-xs ${
-    theme === "dark"
-      ? "text-zinc-500"
-      : "text-zinc-500"
-  }`}
->
-  {isActive
-    ? "Active Project"
-    : `Last Opened: ${new Date(
-        project.updated_at
-      ).toLocaleDateString()}`}
-</span>
+                          <span className="text-xs text-zinc-500">
+                            {isActive
+                              ? "Active Project"
+                              : `Last Opened: ${new Date(
+                                  project.updated_at
+                                ).toLocaleDateString()}`}
+                          </span>
                         </>
                       )}
                     </div>
@@ -384,7 +378,9 @@ function ProjectPanel({
               </button>
 
               <button
-                onClick={handleDeleteProject}
+                onClick={async () => {
+                  await handleDeleteProject();
+                }}
                 className="rounded border border-red-500 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
               >
                 Delete
