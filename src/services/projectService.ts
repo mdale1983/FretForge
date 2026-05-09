@@ -1,6 +1,10 @@
 import { getDatabase } from "../lib/database";
 import { Project } from "../types/project";
 import { getAppState, setAppState } from "./AppStateService";
+import {
+  createSession,
+  setActiveSession,
+} from "./SessionService";
 
 export async function createProject(name: string): Promise<Project | null> {
   const db = await getDatabase();
@@ -73,6 +77,11 @@ export async function setActiveProject(projectId: number) {
   );
 
   await setAppState("active_project_id", String(projectId));
+  const session = await createSession(projectId);
+
+  if (session) {
+    await setActiveSession(session.id);
+  }
 }
 
 export async function getActiveProjectId(): Promise<number | null> {
