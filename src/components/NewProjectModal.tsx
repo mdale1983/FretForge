@@ -30,15 +30,25 @@ function NewProjectModal({ theme, onClose, onCreate }: NewProjectModalProps) {
         </p>
 
         <input
-            value={projectName}
-            onChange={(event) => setProjectName(event.target.value)}
-            className={`w-full rounded border px-3 py-2 mb-4 outline-none ${
-                theme === "dark"
-                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                : "border-zinc-300 bg-white text-zinc-900"
-            }`}
-            placeholder="Project name"
-        />
+          autoFocus
+          value={projectName}
+          onChange={(event) => setProjectName(event.target.value)}
+          onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                  onCreate(projectName);
+              }
+
+              if (event.key === "Escape") {
+                  onClose();
+              }
+          }}
+          className={`w-full rounded border px-3 py-2 mb-4 outline-none ${
+              theme === "dark"
+              ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+              : "border-zinc-300 bg-white text-zinc-900"
+          }`}
+          placeholder="Project name"
+      />
 
         <div className="flex justify-end gap-3">
           <button

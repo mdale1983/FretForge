@@ -236,6 +236,7 @@ function ProjectPanel({
                       project.id ? (
                         <input
                           autoFocus
+                          onFocus={(event) => event.target.select()}
                           value={editingProjectName}
                           onChange={(event) =>
                             setEditingProjectName(
