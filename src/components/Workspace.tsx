@@ -8,6 +8,7 @@ import {
   setActiveProject,
 } from "../services/ProjectService";
 import ProjectPanel from "./ProjectPanel";
+import SessionPanel from "./SessionPanel";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -95,6 +96,7 @@ function getWorkspaceCards(activeModule: string, recentProject: Project | null) 
 }
 
 function Workspace({ activeModule, theme }: WorkspaceProps) {
+  const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [recentProject, setRecentProject] = useState<Project | null>(null);
 
   async function loadCurrentProject() {
@@ -144,8 +146,21 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {activeModule === "forge" && (
-            <ProjectPanel theme={theme} onProjectChanged={loadCurrentProject} />
+                    {activeModule === "forge" && (
+            <>
+              <ProjectPanel
+                theme={theme}
+                onProjectChanged={async () => {
+                  await loadCurrentProject();
+                  setSessionRefreshKey((current) => current + 1);
+                }}
+              />
+
+              <SessionPanel
+                theme={theme}
+                refreshKey={sessionRefreshKey}
+              />
+            </>
           )}
 
           {getWorkspaceCards(activeModule, recentProject).map(([title, body]) => (

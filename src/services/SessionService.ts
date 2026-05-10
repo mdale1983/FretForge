@@ -64,3 +64,35 @@ export async function getActiveSessionId(): Promise<number | null> {
 
   return Number.isFinite(sessionId) ? sessionId : null;
 }
+
+export async function getSessionsForProject(projectId: number) {
+  const db = await getDatabase();
+
+  const sessions = await db.select<any[]>(
+    `
+    SELECT *
+    FROM sessions
+    WHERE project_id = ?
+    ORDER BY updated_at DESC
+    `,
+    [projectId]
+  );
+
+  return sessions;
+}
+
+export async function getSessionById(sessionId: number) {
+  const db = await getDatabase();
+
+  const sessions = await db.select<any[]>(
+    `
+    SELECT *
+    FROM sessions
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [sessionId]
+  );
+
+  return sessions[0] ?? null;
+}
