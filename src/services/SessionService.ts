@@ -1,9 +1,7 @@
 import { getDatabase } from "../lib/database";
-import { setAppState } from "./AppStateService";
+import { getAppState, setAppState } from "./AppStateService";
 
-export async function createSession(
-  projectId: number
-) {
+export async function createSession(projectId: number) {
   const db = await getDatabase();
 
   const now = new Date().toISOString();
@@ -18,20 +16,21 @@ export async function createSession(
     )
     VALUES (?, ?, ?, ?)
     `,
-    [
-      projectId,
-      "Practice Session",
-      now,
-      now,
-    ]
+    [projectId, "Practice Session", now, now]
   );
+
+  return await getMostRecentSessionForProject(projectId);
+}
+
+export async function getMostRecentSessionForProject(projectId: number) {
+  const db = await getDatabase();
 
   const sessions = await db.select<any[]>(
     `
     SELECT *
     FROM sessions
     WHERE project_id = ?
-    ORDER BY created_at DESC
+    ORDER BY updated_at DESC
     LIMIT 1
     `,
     [projectId]
@@ -40,34 +39,28 @@ export async function createSession(
   return sessions[0] ?? null;
 }
 
-export async function setActiveSession(
-  sessionId: number
-) {
-  await setAppState(
-    "active_session_id",
-    String(sessionId)
-  );
+export async function getOrCreateSessionForProject(projectId: number) {
+  const existingSession = await getMostRecentSessionForProject(projectId);
+
+  if (existingSession) {
+    return existingSession;
+  }
+
+  return await createSession(projectId);
+}
+
+export async function setActiveSession(sessionId: number) {
+  await setAppState("active_session_id", String(sessionId));
 }
 
 export async function getActiveSessionId(): Promise<number | null> {
-  const db = await getDatabase();
+  const value = await getAppState("active_session_id");
 
-  const result = await db.select<any[]>(
-    `
-    SELECT value
-    FROM app_state
-    WHERE key = 'active_session_id'
-    LIMIT 1
-    `
-  );
-
-  if (!result.length) {
+  if (!value) {
     return null;
   }
 
-  const sessionId = Number(result[0].value);
+  const sessionId = Number(value);
 
-  return Number.isFinite(sessionId)
-    ? sessionId
-    : null;
+  return Number.isFinite(sessionId) ? sessionId : null;
 }

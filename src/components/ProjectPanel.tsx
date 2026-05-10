@@ -80,12 +80,10 @@ function ProjectPanel({
     onProjectChanged();
   }
 
-  async function handleSelectProject(
-    projectId: number
-  ) {
+  async function handleSelectProject(projectId: number) {
     await setActiveProject(projectId);
 
-    setActiveProjectId(projectId);
+    await loadProjects();
 
     onProjectChanged();
   }
