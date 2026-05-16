@@ -7,6 +7,7 @@ export interface Session {
   name: string;
   created_at: string;
   updated_at: string;
+  active_workspace: string;
 }
 
 export async function createSession(projectId: number) {
@@ -124,4 +125,23 @@ export async function getSessionById(sessionId: number) {
   );
 
   return sessions[0] ?? null;
+}
+
+export async function setSessionWorkspace(
+  sessionId: number,
+  workspace: string
+) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET active_workspace = ?,
+        updated_at = ?
+    WHERE id = ?
+    `,
+    [workspace, now, sessionId]
+  );
 }

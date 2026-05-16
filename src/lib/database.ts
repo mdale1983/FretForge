@@ -39,9 +39,19 @@ export async function initializeDatabase() {
       name TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      active_workspace TEXT NOT NULL DEFAULT 'forge',
       FOREIGN KEY(project_id) REFERENCES projects(id)
     );
   `);
+
+  try {
+    await database.execute(`
+      ALTER TABLE sessions
+      ADD COLUMN active_workspace TEXT NOT NULL DEFAULT 'forge'
+    `);
+  } catch {
+    // Column already exists
+  }
 
   console.log("FretForge database initialized.");
 }
