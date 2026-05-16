@@ -4,7 +4,10 @@ import {
 } from "../services/projectService";
 
 import {
+  createSession,
   getSessionsForProject,
+  setActiveSession,
+  type Session,
 } from "../services/SessionService";
 
 function SessionPanel({
@@ -14,7 +17,7 @@ function SessionPanel({
   theme: string;
   refreshKey: number;
 }) {
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
 
     const [activeProjectId, setActiveProjectId] =
     useState<number | null>(null);
@@ -41,6 +44,18 @@ function SessionPanel({
     setSessions(loadedSessions);
   }
 
+  async function handleNewSession() {
+  if (!activeProjectId) return;
+
+  const newSession = await createSession(activeProjectId);
+
+  if (newSession) {
+    await setActiveSession(newSession.id);
+  }
+
+  await loadSessions();
+}
+
   return (
     <div
       className={`rounded-xl border p-5 shadow-lg ${
@@ -52,6 +67,18 @@ function SessionPanel({
       <h2 className="mb-2 font-semibold">
         Sessions
       </h2>
+
+      <button
+        onClick={handleNewSession}
+        disabled={!activeProjectId}
+        className={`mb-4 rounded px-3 py-2 text-sm font-medium ${
+          theme === "dark"
+            ? "bg-orange-500 text-black hover:bg-orange-400 disabled:bg-zinc-800 disabled:text-zinc-500"
+            : "bg-orange-500 text-white hover:bg-orange-600 disabled:bg-zinc-300 disabled:text-zinc-500"
+        }`}
+      >
+        New Session
+      </button>
 
       <p
         className={`mb-4 text-sm ${
@@ -92,7 +119,11 @@ function SessionPanel({
                 }`}
                 >
                 <div className="font-medium">
-                    {session.name} #{session.id}
+                  {session.name}
+                </div>
+
+                <div className="text-xs text-zinc-500">
+                  Session #{session.id}
                 </div>
 
                 <div className="text-xs text-zinc-500">

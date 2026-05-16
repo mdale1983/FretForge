@@ -24,7 +24,12 @@ export async function createSession(projectId: number) {
     )
     VALUES (?, ?, ?, ?)
     `,
-    [projectId, "Practice Session", now, now]
+    [
+      projectId,
+      `Practice Session ${new Date().toLocaleDateString()}`,
+      now,
+      now,
+    ]
   );
 
   return await getMostRecentSessionForProject(projectId);
