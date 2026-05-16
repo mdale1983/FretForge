@@ -52,7 +52,7 @@ useEffect(() => {
       }`}
     >
       <ForgeStatusBar
-        version="Prototype 0.5"
+        version="Prototype 0.6.3 — Session Restoration"
         theme={theme}
         setTheme={setTheme}
       />
