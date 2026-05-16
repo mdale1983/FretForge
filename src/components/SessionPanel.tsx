@@ -92,7 +92,7 @@ function SessionPanel({
                 }`}
                 >
                 <div className="font-medium">
-                    {session.name}
+                    {session.name} #{session.id}
                 </div>
 
                 <div className="text-xs text-zinc-500">

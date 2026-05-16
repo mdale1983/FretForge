@@ -1,6 +1,14 @@
 import { getDatabase } from "../lib/database";
 import { getAppState, setAppState } from "./AppStateService";
 
+export interface Session {
+  id: number;
+  project_id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function createSession(projectId: number) {
   const db = await getDatabase();
 
@@ -25,7 +33,7 @@ export async function createSession(projectId: number) {
 export async function getMostRecentSessionForProject(projectId: number) {
   const db = await getDatabase();
 
-  const sessions = await db.select<any[]>(
+  const sessions = await db.select<Session[]>(
     `
     SELECT *
     FROM sessions
@@ -51,6 +59,22 @@ export async function getOrCreateSessionForProject(projectId: number) {
 
 export async function setActiveSession(sessionId: number) {
   await setAppState("active_session_id", String(sessionId));
+  await touchSession(sessionId);
+}
+
+export async function touchSession(sessionId: number) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET updated_at = ?
+    WHERE id = ?
+    `,
+    [now, sessionId]
+  );
 }
 
 export async function getActiveSessionId(): Promise<number | null> {
@@ -68,7 +92,7 @@ export async function getActiveSessionId(): Promise<number | null> {
 export async function getSessionsForProject(projectId: number) {
   const db = await getDatabase();
 
-  const sessions = await db.select<any[]>(
+  const sessions = await db.select<Session[]>(
     `
     SELECT *
     FROM sessions
@@ -84,7 +108,7 @@ export async function getSessionsForProject(projectId: number) {
 export async function getSessionById(sessionId: number) {
   const db = await getDatabase();
 
-  const sessions = await db.select<any[]>(
+  const sessions = await db.select<Session[]>(
     `
     SELECT *
     FROM sessions

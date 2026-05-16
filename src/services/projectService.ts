@@ -6,7 +6,6 @@ import {
   setActiveSession,
 } from "./SessionService";
 
-
 export async function createProject(name: string): Promise<Project | null> {
   const db = await getDatabase();
 
