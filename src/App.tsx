@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getActiveSessionId, setSessionWorkspace } from "./services/SessionService";
+import { 
+  getActiveSessionId, 
+  setSessionWorkspace,
+  saveWorkspaceState,
+  loadWorkspaceState,
+} from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
 import Workspace from "./components/Workspace";
@@ -17,6 +22,26 @@ function App() {
     localStorage.getItem("fretforge.theme") ?? "dark"
   );
   useEffect(() => {
+  async function restoreWorkspace() {
+    const workspaceState = await loadWorkspaceState();
+
+    if (!workspaceState) return;
+
+    if (workspaceState.activeModule) {
+      setActiveModule(workspaceState.activeModule);
+    }
+
+    if (workspaceState.activeSessionId) {
+      console.log(
+        "Restored workspace session:",
+        workspaceState.activeSessionId
+      );
+    }
+  }
+
+  restoreWorkspace();
+}, []);
+  useEffect(() => {
   localStorage.setItem("fretforge.activeModule", activeModule);
 }, [activeModule]);
 useEffect(() => {
@@ -29,6 +54,13 @@ useEffect(() => {
       sessionId,
       activeModule
     );
+
+    await saveWorkspaceState({
+      activeProjectId: null,
+      activeSessionId: sessionId.toString(),
+      activeModule,
+      restoredAt: new Date().toISOString(),
+    });
   }
 
   persistWorkspace();

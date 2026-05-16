@@ -1,5 +1,6 @@
 import { getDatabase } from "../lib/database";
 import { getAppState, setAppState } from "./AppStateService";
+import { SessionWorkspaceState } from "../types/session";
 
 export interface Session {
   id: number;
@@ -144,4 +145,29 @@ export async function setSessionWorkspace(
     `,
     [workspace, now, sessionId]
   );
+}
+
+export async function saveWorkspaceState(
+  workspaceState: SessionWorkspaceState
+) {
+  localStorage.setItem(
+    "fretforge_workspace_state",
+    JSON.stringify(workspaceState)
+  );
+}
+
+export async function loadWorkspaceState(): Promise<SessionWorkspaceState | null> {
+  const storedWorkspaceState = localStorage.getItem(
+    "fretforge_workspace_state"
+  );
+
+  if (!storedWorkspaceState) {
+    return null;
+  }
+
+  return JSON.parse(storedWorkspaceState);
+}
+
+export async function clearWorkspaceState() {
+  localStorage.removeItem("fretforge_workspace_state");
 }
