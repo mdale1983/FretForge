@@ -18,5 +18,8 @@ export interface SessionWorkspaceState {
   windowX: number | null;
   windowY: number | null;
   isMaximized: boolean;
+  restoredWindowWidth: number | null;
+  restoredWindowHeight: number | null;
+  lastMonitorLabel: string | null;
   restoredAt: string | null;
 }
