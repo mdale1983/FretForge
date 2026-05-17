@@ -7,8 +7,16 @@ export type Session = {
 };
 
 export interface SessionWorkspaceState {
-  activeProjectId: string | null;
-  activeSessionId: string | null;
+  activeProjectId: number | null;
+  activeSessionId: number | null;
   activeModule: string | null;
+  leftRailPinned: boolean;
+  windowWidth: number | null;
+  windowHeight: number | null;
+  screenWidth: number | null;
+  screenHeight: number | null;
+  windowX: number | null;
+  windowY: number | null;
+  isMaximized: boolean;
   restoredAt: string | null;
 }

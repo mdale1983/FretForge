@@ -171,3 +171,56 @@ export async function loadWorkspaceState(): Promise<SessionWorkspaceState | null
 export async function clearWorkspaceState() {
   localStorage.removeItem("fretforge_workspace_state");
 }
+
+export async function deleteSession(sessionId: number) {
+  const activeSessionId = await getActiveSessionId();
+
+  if (activeSessionId === sessionId) {
+    throw new Error("Cannot delete the active session.");
+  }
+
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+    DELETE FROM sessions
+    WHERE id = ?
+    `,
+    [sessionId]
+  );
+}
+
+export async function deleteInactiveSessionsForProject(projectId: number) {
+  const activeSessionId = await getActiveSessionId();
+  const db = await getDatabase();
+
+  if (!activeSessionId) {
+    return;
+  }
+
+  await db.execute(
+    `
+    DELETE FROM sessions
+    WHERE project_id = ?
+    AND id != ?
+    `,
+    [projectId, activeSessionId]
+  );
+}
+
+export async function getSessionCountForProject(
+  projectId: number
+): Promise<number> {
+  const db = await getDatabase();
+
+  const result = await db.select<{ count: number }[]>(
+    `
+    SELECT COUNT(*) as count
+    FROM sessions
+    WHERE project_id = ?
+    `,
+    [projectId]
+  );
+
+  return result[0]?.count ?? 0;
+}

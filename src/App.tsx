@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { 
   getActiveSessionId, 
   setSessionWorkspace,
@@ -31,10 +32,52 @@ function App() {
       setActiveModule(workspaceState.activeModule);
     }
 
+    if (typeof workspaceState.leftRailPinned === "boolean") {
+      setLeftPinned(workspaceState.leftRailPinned);
+    }
+
+    const appWindow = getCurrentWindow();
+
+      if (
+        workspaceState.windowWidth &&
+        workspaceState.windowHeight &&
+        typeof workspaceState.windowX === "number" &&
+        typeof workspaceState.windowY === "number"
+      ) {
+        await appWindow.setSize(
+          new LogicalSize(
+            workspaceState.windowWidth,
+            workspaceState.windowHeight
+          )
+        );
+
+        await appWindow.setPosition(
+          new LogicalPosition(
+            workspaceState.windowX,
+            workspaceState.windowY
+          )
+        );
+      }
+
     if (workspaceState.activeSessionId) {
       console.log(
         "Restored workspace session:",
-        workspaceState.activeSessionId
+        workspaceState.activeSessionId,
+        "module:",
+        workspaceState.activeModule,
+        "window:",
+        workspaceState.windowWidth,
+        "x",
+        workspaceState.windowHeight,
+        "screen:",
+        workspaceState.screenWidth,
+        "x",
+        workspaceState.screenHeight,
+        "position:",
+        workspaceState.windowX,
+        workspaceState.windowY,
+        "maximized:",
+        workspaceState.isMaximized
       );
     }
   }
@@ -57,14 +100,22 @@ useEffect(() => {
 
     await saveWorkspaceState({
       activeProjectId: null,
-      activeSessionId: sessionId.toString(),
+      activeSessionId: sessionId,
       activeModule,
+      leftRailPinned: leftPinned,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      windowX: window.screenX,
+      windowY: window.screenY,
+      isMaximized: false,
       restoredAt: new Date().toISOString(),
     });
   }
 
   persistWorkspace();
-}, [activeModule]);
+}, [activeModule, leftPinned]);
   useEffect(() => {
     localStorage.setItem("fretforge.theme", theme);
   }, [theme]);
