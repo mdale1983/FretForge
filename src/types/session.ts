@@ -11,6 +11,7 @@ export interface SessionWorkspaceState {
   activeSessionId: number | null;
   activeModule: string | null;
   leftRailPinned: boolean;
+  rightRailPinned: boolean;
   windowWidth: number | null;
   windowHeight: number | null;
   screenWidth: number | null;

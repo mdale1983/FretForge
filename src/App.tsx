@@ -10,6 +10,8 @@ import {
   saveWorkspaceState,
   loadWorkspaceState,
   deleteSession,
+  switchToFallbackSessionBeforeDelete,
+  getSessionCountForProject,
 } from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
@@ -26,9 +28,15 @@ function App() {
     localStorage.getItem("fretforge.leftPinned") === "true"
   );
 
+  const [rightPinned, setRightPinned] = useState(
+    localStorage.getItem("fretforge.rightPinned") === "true"
+  );
+
   const [theme, setTheme] = useState(
     localStorage.getItem("fretforge.theme") ?? "dark"
   );
+
+  const [sessionCount, setSessionCount] = useState(0);
 
   async function saveCurrentWorkspaceState() {
     const sessionId = await getActiveSessionId();
@@ -42,6 +50,7 @@ function App() {
       activeSessionId: sessionId,
       activeModule,
       leftRailPinned: leftPinned,
+      rightRailPinned: rightPinned,
       windowWidth: window.innerWidth,
       windowHeight: window.innerHeight,
       screenWidth: window.screen.width,
@@ -58,6 +67,7 @@ function App() {
 
   async function handleDeleteSession() {
     const sessionId = await getActiveSessionId();
+    const projectId = await getActiveProjectId();
 
     if (!sessionId) return;
 
@@ -68,10 +78,18 @@ function App() {
     if (!confirmed) return;
 
     try {
+      await switchToFallbackSessionBeforeDelete(projectId, sessionId);
       await deleteSession(sessionId);
+      const updatedSessionCount =
+        await getSessionCountForProject(projectId);
+
+      setSessionCount(updatedSessionCount);
+      await saveCurrentWorkspaceState();
+
+      window.alert("Session deleted. FretForge switched to a fallback session.");
     } catch (error) {
-      console.warn("Session delete blocked:", error);
-      window.alert("Cannot delete the active session yet.");
+      console.warn("Session delete failed:", error);
+      window.alert("Could not delete session safely.");
     }
   }
 
@@ -87,6 +105,10 @@ function App() {
 
       if (typeof workspaceState.leftRailPinned === "boolean") {
         setLeftPinned(workspaceState.leftRailPinned);
+      }
+
+      if (typeof workspaceState.rightRailPinned === "boolean") {
+        setRightPinned(workspaceState.rightRailPinned);
       }
 
       const appWindow = getCurrentWindow();
@@ -118,6 +140,13 @@ function App() {
         if (workspaceState.isMaximized) {
           await appWindow.maximize();
         }
+      }
+
+      const activeProjectId = await getActiveProjectId();
+
+      if (activeProjectId) {
+        const count = await getSessionCountForProject(activeProjectId);
+        setSessionCount(count);
       }
 
       if (workspaceState.activeSessionId) {
@@ -199,6 +228,10 @@ function App() {
     localStorage.setItem("fretforge.leftPinned", String(leftPinned));
   }, [leftPinned]);
 
+  useEffect(() => {
+    localStorage.setItem("fretforge.rightPinned", String(rightPinned));
+  }, [rightPinned]);
+
   return (
     <div
       className={`h-screen w-screen overflow-hidden ${
@@ -227,7 +260,10 @@ function App() {
         <RightRail
           activeModule={activeModule}
           theme={theme}
+          rightPinned={rightPinned}
+          setRightPinned={setRightPinned}
           onDeleteSession={handleDeleteSession}
+          sessionCount={sessionCount}
         />
       </div>
     </div>
