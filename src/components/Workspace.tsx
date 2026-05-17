@@ -132,7 +132,7 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
         theme === "dark" ? "bg-zinc-950" : "bg-zinc-100"
       }`}
     >
-      <section className="max-w-6xl mx-auto">
+      <section className="w-full max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-orange-400 mb-2">
           {currentModule.name}
         </h1>
@@ -145,7 +145,7 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
           {currentModule.description}
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
                     {activeModule === "forge" && (
             <>
               <ProjectPanel
@@ -166,17 +166,27 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
           {getWorkspaceCards(activeModule, recentProject).map(([title, body]) => (
             <div
               key={title}
-              className={`rounded-xl border p-5 shadow-lg transition-colors ${
+              className={`rounded-xl border p-5 shadow-lg transition-all duration-200 ${
                 theme === "dark"
-                  ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700"
-                  : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400"
+                  ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700 hover:-translate-y-0.5"
+                  : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400 hover:-translate-y-0.5"
               }`}
             >
-              <h2 className="font-semibold mb-2">{title}</h2>
+              <h2
+                className={`font-semibold mb-2 ${
+                  theme === "dark"
+                    ? "text-zinc-100"
+                    : "text-zinc-900"
+                }`}
+              >
+                {title}
+              </h2>
 
               <p
                 className={`text-sm leading-relaxed ${
-                  theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+                  theme === "dark"
+                    ? "text-zinc-400"
+                    : "text-zinc-700"
                 }`}
               >
                 {body}

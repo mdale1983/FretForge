@@ -8,7 +8,12 @@ type RightRailProps = {
 };
 
 import { modules } from "../data/modules";
-import { Pin, PinOff, Trash2 } from "lucide-react";
+import {
+  PanelRight,
+  Pin,
+  PinOff,
+  Trash2,
+} from "lucide-react";
 
 function RightRail({
   activeModule,
@@ -20,6 +25,16 @@ function RightRail({
 }: RightRailProps) {
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
+
+  const labelClass =
+    theme === "dark"
+      ? "text-zinc-500"
+      : "text-zinc-600";
+
+  const valueClass =
+    theme === "dark"
+      ? "text-zinc-200"
+      : "text-zinc-900";
 
   return (
     <aside
@@ -33,6 +48,20 @@ function RightRail({
           : "border-zinc-300 bg-white"
       }`}
     >
+      <div
+        className={`absolute mt-4 ml-4 transition-opacity ${
+          rightPinned
+            ? "opacity-0"
+            : "opacity-100 group-hover:opacity-0"
+        } ${
+          theme === "dark"
+            ? "text-zinc-500"
+            : "text-zinc-600"
+        }`}
+      >
+        <PanelRight size={18} />
+      </div>
+
       <div className="p-4 pr-6 break-words">
         <div className="mb-4 flex items-center justify-between">
           <h2
@@ -43,7 +72,7 @@ function RightRail({
             } ${
               theme === "dark"
                 ? "text-orange-400"
-                : "text-orange-500"
+                : "text-orange-600"
             }`}
           >
             Context
@@ -58,7 +87,7 @@ function RightRail({
             } ${
               theme === "dark"
                 ? "text-zinc-500 hover:text-orange-400"
-                : "text-zinc-500 hover:text-orange-600"
+                : "text-zinc-600 hover:text-orange-600"
             }`}
             title={
               rightPinned
@@ -75,64 +104,60 @@ function RightRail({
             rightPinned
               ? "opacity-100"
               : "opacity-0 group-hover:opacity-100"
-          } ${
-            theme === "dark"
-              ? "text-zinc-400"
-              : "text-zinc-700"
           }`}
         >
           <div className="space-y-5">
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Active Module
               </p>
-              <p className="text-zinc-200">
+              <p className={valueClass}>
                 {currentModule.name}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Description
               </p>
-              <p className="text-zinc-300 leading-relaxed">
+              <p className={`${valueClass} leading-relaxed`}>
                 {currentModule.description}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Project
               </p>
-              <p className="text-zinc-300">None</p>
+              <p className={valueClass}>None</p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Storage
               </p>
-              <p className="text-zinc-300">NAS</p>
+              <p className={valueClass}>NAS</p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Recovery
               </p>
-              <p className="text-zinc-300">Ready</p>
+              <p className={valueClass}>Ready</p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Logs
               </p>
-              <p className="text-zinc-300">Clean</p>
+              <p className={valueClass}>Clean</p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Sessions
               </p>
-              <p className="text-zinc-300">
+              <p className={valueClass}>
                 {sessionCount ?? 0}
               </p>
             </div>
@@ -143,7 +168,7 @@ function RightRail({
             className={`flex w-full items-center justify-center gap-2 mt-4 px-3 py-2 rounded transition-colors ${
               theme === "dark"
                 ? "bg-red-950 hover:bg-red-900 text-red-300"
-                : "bg-red-100 hover:bg-red-200 text-red-700"
+                : "bg-red-100 hover:bg-red-200 text-red-800"
             }`}
           >
             <Trash2 size={16} />
