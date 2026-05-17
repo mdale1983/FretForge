@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getActiveProjectId,
-} from "../services/projectService";
+} from "../services/ProjectService";
 
 import {
   createSession,
@@ -58,20 +58,21 @@ function SessionPanel({
 
   return (
     <div
-      className={`rounded-xl border p-5 shadow-lg ${
+      className={`flex flex-col rounded-2xl border p-5 sm:p-6 shadow-lg min-h-[420px] ${
         theme === "dark"
           ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
           : "border-zinc-300 bg-white shadow-zinc-300/40"
       }`}
     >
-      <h2 className="mb-2 font-semibold">
-        Sessions
-      </h2>
+      <div className="mb-5">
+        <h2 className="mb-2 text-lg sm:text-xl font-semibold tracking-tight">
+          Sessions
+        </h2>
 
       <button
         onClick={handleNewSession}
         disabled={!activeProjectId}
-        className={`mb-4 rounded px-3 py-2 text-sm font-medium ${
+        className={`w-full sm:w-auto mb-5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
           theme === "dark"
             ? "bg-orange-500 text-black hover:bg-orange-400 disabled:bg-zinc-800 disabled:text-zinc-500"
             : "bg-orange-500 text-white hover:bg-orange-600 disabled:bg-zinc-300 disabled:text-zinc-500"
@@ -81,7 +82,7 @@ function SessionPanel({
       </button>
 
       <p
-        className={`mb-4 text-sm ${
+        className={`text-sm leading-relaxed ${
           theme === "dark"
             ? "text-zinc-400"
             : "text-zinc-600"
@@ -90,17 +91,18 @@ function SessionPanel({
         {sessions.length} saved session
         {sessions.length === 1 ? "" : "s"} for the active project.
       </p>
+      </div>
 
-      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
         {sessions.length === 0 && (
           <div
-            className={`rounded border px-4 py-6 text-center text-sm ${
+            className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
               theme === "dark"
                 ? "border-zinc-800 bg-zinc-950 text-zinc-500"
                 : "border-zinc-300 bg-zinc-100 text-zinc-500"
             }`}
           >
-            No sessions found.
+            No sessions found. Create a session to begin tracking recording, practice, and workflow progress.
           </div>
         )}
 
@@ -110,19 +112,25 @@ function SessionPanel({
             return (
                 <div
                 key={session.id}
-                className={`rounded border px-3 py-2 text-sm ${
+                className={`rounded-xl border px-4 py-3 text-sm transition-all duration-200 ${
                     isLatest
-                    ? "border-orange-500 bg-orange-500/10"
+                    ? "border-orange-500 bg-orange-500/10 shadow-inner shadow-orange-500/10"
                     : theme === "dark"
-                    ? "border-zinc-700 bg-zinc-950 text-zinc-300"
-                    : "border-zinc-300 bg-zinc-100 text-zinc-700"
+                    ? "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900"
+                    : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-200"
                 }`}
                 >
-                <div className="font-medium">
+                <div
+                  className={`font-medium ${
+                    theme === "dark"
+                      ? "text-zinc-100"
+                      : "text-zinc-900"
+                  }`}
+                >
                   {session.name}
                 </div>
 
-                <div className="text-xs text-zinc-500">
+                <div className="mt-1 text-xs text-zinc-500">
                   Session #{session.id}
                 </div>
 

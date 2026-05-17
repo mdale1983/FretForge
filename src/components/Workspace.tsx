@@ -125,28 +125,31 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
 
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
+    const workspaceCards = getWorkspaceCards(activeModule, recentProject);
 
   return (
     <main
-      className={`flex-1 p-6 overflow-auto ${
+      className={`flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 ${
         theme === "dark" ? "bg-zinc-950" : "bg-zinc-100"
       }`}
     >
-      <section className="w-full max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-orange-400 mb-2">
-          {currentModule.name}
-        </h1>
+      <section className="w-full max-w-[1600px] mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-orange-400 tracking-tight mb-3">
+            {currentModule.name}
+          </h1>
 
-        <p
-          className={`mb-6 ${
-            theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-          }`}
-        >
-          {currentModule.description}
-        </p>
+          <p
+            className={`max-w-3xl text-sm sm:text-base leading-relaxed ${
+              theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+            }`}
+          >
+            {currentModule.description}
+          </p>
+        </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
-                    {activeModule === "forge" && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-5 auto-rows-fr">
+          {activeModule === "forge" && (
             <>
               <ProjectPanel
                 theme={theme}
@@ -163,17 +166,17 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
             </>
           )}
 
-          {getWorkspaceCards(activeModule, recentProject).map(([title, body]) => (
+          {workspaceCards.map(([title, body]) => (
             <div
               key={title}
-              className={`rounded-xl border p-5 shadow-lg transition-all duration-200 ${
+              className={`flex flex-col rounded-2xl border p-5 sm:p-6 shadow-lg transition-all duration-200 min-h-[160px] ${
                 theme === "dark"
-                  ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700 hover:-translate-y-0.5"
-                  : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400 hover:-translate-y-0.5"
+                  ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700 hover:bg-zinc-900 hover:-translate-y-0.5"
+                  : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400 hover:bg-zinc-50 hover:-translate-y-0.5"
               }`}
             >
               <h2
-                className={`font-semibold mb-2 ${
+                className={`text-base sm:text-lg font-semibold tracking-tight mb-3 ${
                   theme === "dark"
                     ? "text-zinc-100"
                     : "text-zinc-900"
@@ -183,7 +186,7 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
               </h2>
 
               <p
-                className={`text-sm leading-relaxed ${
+                className={`text-sm sm:text-[15px] leading-relaxed flex-1 ${
                   theme === "dark"
                     ? "text-zinc-400"
                     : "text-zinc-700"

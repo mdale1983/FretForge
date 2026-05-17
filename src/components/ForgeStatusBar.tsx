@@ -7,25 +7,31 @@ type ForgeStatusBarProps = {
 function ForgeStatusBar({ version, theme, setTheme }: ForgeStatusBarProps) {
   return (
     <header
-        className={`h-12 border-b flex items-center justify-between px-4 text-sm ${
+        className={`flex h-14 items-center justify-between border-b px-4 sm:px-5 text-sm shrink-0 ${
             theme === "dark"
             ? "border-zinc-800 bg-zinc-900"
             : "border-zinc-300 bg-white"
         }`}
     >
-      <div className="flex items-center gap-4">
-        <div className="font-bold tracking-wide text-orange-400">
+      <div className="flex items-center gap-5 min-w-0">
+        <div className="text-base font-bold tracking-wide text-orange-400 whitespace-nowrap">
           FretForge
         </div>
 
-        <div className={theme === "dark" ? "text-zinc-500" : "text-zinc-600"}>
+        <div
+          className={`hidden sm:block whitespace-nowrap ${
+            theme === "dark"
+              ? "text-zinc-500"
+              : "text-zinc-600"
+          }`}
+        >
             {version}
         </div>
       </div>
 
       <div
-        className={`hidden xl:flex gap-4 ${
-            theme === "dark" ? "text-zinc-300" : "text-zinc-700"
+        className={`hidden xl:flex items-center gap-5 px-6 ${
+            theme === "dark" ? "text-zinc-400" : "text-zinc-600"
         }`}
       >
         <span>CPU: --%</span>
@@ -37,17 +43,23 @@ function ForgeStatusBar({ version, theme, setTheme }: ForgeStatusBarProps) {
       </div>
 
       <div
-        className={`flex items-center gap-3 ${
-            theme === "dark" ? "text-zinc-400" : "text-zinc-700"
+        className={`flex items-center gap-4 shrink-0 ${
+            theme === "dark" ? "text-zinc-400" : "text-zinc-600"
         }`}
       >
-        <span>Mic: Off</span>
+        <span className="hidden lg:inline">Mic: Off</span>
         <span>Tuner: Ready</span>
-        <span>Storage: NAS</span>
+        <span className="hidden md:inline">
+          Storage: NAS
+        </span>
 
         <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="rounded-md border border-zinc-700 px-2 py-1 text-xs hover:border-orange-400 hover:text-orange-400"
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+              theme === "dark"
+                ? "border-zinc-700 text-zinc-300 hover:border-orange-400 hover:text-orange-400 hover:bg-zinc-800"
+                : "border-zinc-300 text-zinc-700 hover:border-orange-500 hover:text-orange-600 hover:bg-zinc-100"
+            }`}
         >
             {theme === "dark" ? "Light" : "Dark"}
         </button>

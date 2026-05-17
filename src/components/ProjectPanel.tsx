@@ -7,7 +7,7 @@ import {
   getProjects,
   renameProject,
   setActiveProject,
-} from "../services/projectService";
+} from "../services/ProjectService";
 
 type ProjectPanelProps = {
   theme: string;
@@ -156,45 +156,47 @@ function ProjectPanel({
   return (
     <>
       <div
-        className={`rounded-xl border p-5 shadow-lg ${
+        className={`flex flex-col rounded-2xl border p-5 sm:p-6 shadow-lg min-h-[420px] ${
           theme === "dark"
             ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
             : "border-zinc-300 bg-white shadow-zinc-300/40"
         }`}
       >
-        <h2 className="mb-2 font-semibold">
-          Project Manager
-        </h2>
+        <div className="mb-5">
+          <h2 className="mb-2 text-lg sm:text-xl font-semibold tracking-tight">
+            Project Manager
+          </h2>
 
-        <p
-          className={`mb-4 text-sm ${
-            theme === "dark"
-              ? "text-zinc-400"
-              : "text-zinc-600"
-          }`}
-        >
-          Create and load local FretForge projects.
-        </p>
+          <p
+            className={`text-sm leading-relaxed ${
+              theme === "dark"
+                ? "text-zinc-400"
+                : "text-zinc-600"
+            }`}
+          >
+            Create, organize, and manage local FretForge projects.
+          </p>
+        </div>
 
         <button
           onClick={() =>
             setIsNewProjectOpen(true)
           }
-          className="rounded border border-orange-500 px-4 py-2 text-orange-400 hover:bg-orange-500/10"
+          className="w-full sm:w-auto rounded-lg border border-orange-500 px-4 py-2.5 text-sm font-medium text-orange-400 transition-colors hover:bg-orange-500/10"
         >
           New Project
         </button>
 
-        <div className="mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
+        <div className="mt-5 flex-1 space-y-3 overflow-y-auto pr-1 min-h-0">
           {projects.length === 0 && (
             <div
-              className={`rounded border px-4 py-6 text-center text-sm ${
+              className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
                 theme === "dark"
                   ? "border-zinc-800 bg-zinc-950 text-zinc-500"
                   : "border-zinc-300 bg-zinc-100 text-zinc-500"
               }`}
             >
-              No projects created yet.
+              No projects created yet. Create a project to begin building sessions, tones, and practice workflows.
             </div>
           )}
 
@@ -205,7 +207,7 @@ function ProjectPanel({
             return (
               <div
                 key={project.id}
-                className={`flex items-center gap-2 ${
+                className={`flex items-start gap-2 ${
                   theme === "dark"
                     ? "text-zinc-300"
                     : "text-zinc-700"
@@ -222,11 +224,11 @@ function ProjectPanel({
                       );
                     }
                   }}
-                  className={`flex-1 cursor-pointer rounded border px-3 py-2 text-left text-sm transition-colors ${
+                  className={`flex-1 cursor-pointer rounded-xl border px-4 py-3 text-left text-sm transition-all duration-200 ${
                     isActive
-                      ? "border-orange-500 bg-orange-500/10 text-orange-400"
+                      ? "border-orange-500 bg-orange-500/10 text-orange-300 shadow-inner shadow-orange-500/10"
                       : theme === "dark"
-                      ? "border-zinc-700 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
+                      ? "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900"
                       : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
                   }`}
                 >
@@ -288,7 +290,7 @@ function ProjectPanel({
                             {project.name}
                           </span>
 
-                          <span className="text-xs text-zinc-500">
+                          <span className="mt-1 text-xs text-zinc-500">
                             {isActive
                               ? "Active Project"
                               : `Last Opened: ${new Date(
@@ -299,7 +301,7 @@ function ProjectPanel({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3 self-start pt-1">
                       <button
                         onClick={(event) => {
                           event.stopPropagation();
