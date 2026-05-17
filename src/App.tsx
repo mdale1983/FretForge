@@ -9,6 +9,7 @@ import {
   setSessionWorkspace,
   saveWorkspaceState,
   loadWorkspaceState,
+  deleteSession,
 } from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
@@ -52,6 +53,25 @@ function App() {
       lastMonitorLabel: `${window.screen.width}x${window.screen.height}`,
       restoredAt: new Date().toISOString(),
     });
+  }
+
+  async function handleDeleteSession() {
+    const sessionId = await getActiveSessionId();
+
+    if (!sessionId) return;
+
+    const confirmed = window.confirm(
+      "Delete this session? This cannot be undone."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteSession(sessionId);
+    } catch (error) {
+      console.warn("Session delete blocked:", error);
+      window.alert("Cannot delete the active session yet.");
+    }
   }
 
   useEffect(() => {
@@ -203,7 +223,11 @@ function App() {
 
         <Workspace activeModule={activeModule} theme={theme} />
 
-        <RightRail activeModule={activeModule} theme={theme} />
+        <RightRail
+          activeModule={activeModule}
+          theme={theme}
+          onDeleteSession={handleDeleteSession}
+        />
       </div>
     </div>
   );

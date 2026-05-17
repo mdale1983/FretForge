@@ -1,10 +1,12 @@
 type RightRailProps = {
   activeModule: string;
   theme: string;
+  onDeleteSession?: () => Promise<void>;
 };
 import { modules } from "../data/modules";
+import { Trash2 } from "lucide-react";
 
-function RightRail({ activeModule, theme }: RightRailProps) {
+function RightRail({ activeModule, theme, onDeleteSession }: RightRailProps) {
       const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
   return (
@@ -39,6 +41,17 @@ function RightRail({ activeModule, theme }: RightRailProps) {
             <p>Storage mode: NAS</p>
             <p>Recovery: Ready</p>
             <p>Logs: Clean</p>
+            <button
+                onClick={() => void onDeleteSession?.()}
+                className={`flex items-center gap-2 mt-4 px-3 py-2 rounded transition-colors ${
+                  theme === "dark"
+                    ? "bg-red-950 hover:bg-red-900 text-red-300"
+                    : "bg-red-100 hover:bg-red-200 text-red-700"
+                }`}
+              >
+              <Trash2 size={16} />
+              <span>Delete Session</span>
+            </button>
         </div>
       </div>
     </aside>

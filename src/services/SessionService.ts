@@ -188,6 +188,12 @@ export async function deleteSession(sessionId: number) {
     `,
     [sessionId]
   );
+
+  const workspaceState = await loadWorkspaceState();
+
+  if (workspaceState?.activeSessionId === sessionId) {
+    await clearWorkspaceState();
+  }
 }
 
 export async function deleteInactiveSessionsForProject(projectId: number) {
@@ -223,4 +229,42 @@ export async function getSessionCountForProject(
   );
 
   return result[0]?.count ?? 0;
+}
+
+export async function createRecoverySession(projectId: number) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    INSERT INTO sessions (
+      project_id,
+      name,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?)
+    `,
+    [
+      projectId,
+      `Recovery Session ${new Date().toLocaleString()}`,
+      now,
+      now,
+    ]
+  );
+
+  return await getMostRecentSessionForProject(projectId);
+}
+
+export async function createFallbackSessionIfNeeded(
+  projectId: number
+) {
+  const sessionCount = await getSessionCountForProject(projectId);
+
+  if (sessionCount > 0) {
+    return;
+  }
+
+  await createRecoverySession(projectId);
 }
