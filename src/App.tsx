@@ -15,6 +15,7 @@ import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
 import Workspace from "./components/Workspace";
 import RightRail from "./components/RightRail";
+import { getActiveProjectId } from "./services/ProjectService";
 
 function App() {
   const [activeModule, setActiveModule] = useState(
