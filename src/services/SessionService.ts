@@ -268,3 +268,47 @@ export async function createFallbackSessionIfNeeded(
 
   await createRecoverySession(projectId);
 }
+
+export async function getNextAvailableSessionForProject(
+  projectId: number,
+  excludedSessionId: number
+) {
+  const db = await getDatabase();
+
+  const sessions = await db.select<Session[]>(
+    `
+    SELECT *
+    FROM sessions
+    WHERE project_id = ?
+    AND id != ?
+    ORDER BY updated_at DESC
+    LIMIT 1
+    `,
+    [projectId, excludedSessionId]
+  );
+
+  return sessions[0] ?? null;
+}
+
+export async function switchToFallbackSessionBeforeDelete(
+  projectId: number,
+  sessionIdToDelete: number
+) {
+  const fallbackSession = await getNextAvailableSessionForProject(
+    projectId,
+    sessionIdToDelete
+  );
+
+  if (fallbackSession) {
+    await setActiveSession(fallbackSession.id);
+    return fallbackSession;
+  }
+
+  const recoverySession = await createRecoverySession(projectId);
+
+  if (recoverySession) {
+    await setActiveSession(recoverySession.id);
+  }
+
+  return recoverySession;
+}
