@@ -13,4 +13,6 @@ export type WorkstationStatus = {
   micState: "On" | "Off";
   tunerState: "Idle" | "Listening" | "Muted";
   storageState: "NAS Online" | "Local Fallback" | "Offline";
+  recoveryState: string;
+  logState: string;
 };

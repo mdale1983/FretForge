@@ -307,6 +307,11 @@ function App() {
           rightPinned={rightPinned}
           setRightPinned={setRightPinned}
           sessionCount={sessionCount}
+          activeProject={workstationStatus.activeProject}
+          activeSession={workstationStatus.activeSession}
+          storageState={workstationStatus.storageState}
+          recoveryState={workstationStatus.recoveryState}
+          logState={workstationStatus.logState}
         />
       </div>
     </div>

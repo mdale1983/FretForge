@@ -4,6 +4,11 @@ type RightRailProps = {
   rightPinned: boolean;
   setRightPinned: (value: boolean) => void;
   sessionCount?: number;
+  activeProject?: string;
+  activeSession?: string;
+  storageState?: string;
+  recoveryState?: string;
+  logState?: string;
 };
 
 import { modules } from "../data/modules";
@@ -19,6 +24,11 @@ function RightRail({
   rightPinned,
   setRightPinned,
   sessionCount,
+  activeProject,
+  activeSession,
+  storageState,
+  recoveryState,
+  logState,
 }: RightRailProps) {
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
@@ -75,7 +85,22 @@ function RightRail({
             Context
           </h2>
 
-        </div>
+          <button
+            onClick={() => setRightPinned(!rightPinned)}
+            className={`rounded p-1 transition-colors ${
+              rightPinned
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
+            } ${
+              theme === "dark"
+                ? "text-zinc-500 hover:text-orange-400"
+                : "text-zinc-600 hover:text-orange-600"
+            }`}
+            title={rightPinned ? "Unpin right rail" : "Pin right rail"}
+          >
+            {rightPinned ? <PinOff size={16} /> : <Pin size={16} />}
+          </button>
+          </div>
 
         <div
           className={`space-y-3 text-sm transition-opacity ${
@@ -96,6 +121,15 @@ function RightRail({
 
             <div>
               <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
+                Active Session
+              </p>
+              <p className={valueClass}>
+                {activeSession ?? "No active session"}
+              </p>
+            </div>
+
+            <div>
+              <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Description
               </p>
               <p className={`${valueClass} leading-relaxed`}>
@@ -107,14 +141,18 @@ function RightRail({
               <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Project
               </p>
-              <p className={valueClass}>None</p>
+              <p className={valueClass}>
+                {activeProject ?? "No project selected"}
+              </p>
             </div>
 
             <div>
               <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
-                Storage
+                Recovery
               </p>
-              <p className={valueClass}>NAS</p>
+              <p className={valueClass}>
+                {recoveryState ?? "Unknown"}
+              </p>
             </div>
 
             <div>
@@ -128,7 +166,9 @@ function RightRail({
               <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
                 Logs
               </p>
-              <p className={valueClass}>Clean</p>
+              <p className={valueClass}>
+                {logState ?? "Unknown"}
+              </p>
             </div>
 
             <div>

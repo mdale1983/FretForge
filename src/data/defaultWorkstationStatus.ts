@@ -15,4 +15,6 @@ export const defaultWorkstationStatus: WorkstationStatus = {
   micState: "Off",
   tunerState: "Idle",
   storageState: "NAS Online",
+  recoveryState: "Workspace Restorable",
+  logState: "Clean",
 };
