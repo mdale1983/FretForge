@@ -131,7 +131,7 @@ function ForgeStatusBar({
             ].map((item) => (
               <div
                 key={item}
-                className={`w-28 rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
+                className={`w-52 rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
               >
                 {item}
               </div>
@@ -165,13 +165,19 @@ function ForgeStatusBar({
               <div
                 className={`rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
               >
-                Buffer --
+                <>
+                  <div>Buffer</div>
+                  <div>{workstationStatus.bufferSize}</div>
+                </>
               </div>
 
               <div
                 className={`rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
               >
-                Latency {workstationStatus.latency}
+                <>
+                  <div>Latency</div>
+                  <div>{workstationStatus.latency}</div>
+                </>
               </div>
             </div>
           </div>

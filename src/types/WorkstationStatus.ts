@@ -6,6 +6,7 @@ export type WorkstationStatus = {
   audioDevice: string;
   sampleRate: string;
   latency: string;
+  bufferSize: string;
 
   activeProject: string;
   activeSession: string;

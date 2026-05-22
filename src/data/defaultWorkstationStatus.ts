@@ -3,10 +3,11 @@ import type { WorkstationStatus } from "../types/WorkstationStatus";
 export const defaultWorkstationStatus: WorkstationStatus = {
   cpu: "CPU --",
   ram: "RAM --",
-  gpu: "GPU --",
+  gpu: "GPU Detecting...",
 
   audioDevice: "Audio: Not detected",
   sampleRate: "48 kHz",
+  bufferSize: "Buffer Pending",
   latency: "-- ms",
 
   activeProject: "No project selected",
