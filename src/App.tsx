@@ -52,7 +52,7 @@ function App() {
     const appWindow = getCurrentWindow();
     const isMaximized = await appWindow.isMaximized();
     const windowPosition = await appWindow.outerPosition();
-    const windowSize = await appWindow.outerSize();
+    const windowSize = await appWindow.innerSize();
 
     if (!sessionId) return;
 
@@ -306,7 +306,6 @@ function App() {
           theme={theme}
           rightPinned={rightPinned}
           setRightPinned={setRightPinned}
-          onDeleteSession={handleDeleteSession}
           sessionCount={sessionCount}
         />
       </div>

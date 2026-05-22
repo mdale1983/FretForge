@@ -3,7 +3,6 @@ type RightRailProps = {
   theme: string;
   rightPinned: boolean;
   setRightPinned: (value: boolean) => void;
-  onDeleteSession?: () => Promise<void>;
   sessionCount?: number;
 };
 
@@ -12,7 +11,6 @@ import {
   PanelRight,
   Pin,
   PinOff,
-  Trash2,
 } from "lucide-react";
 
 function RightRail({
@@ -20,7 +18,6 @@ function RightRail({
   theme,
   rightPinned,
   setRightPinned,
-  onDeleteSession,
   sessionCount,
 }: RightRailProps) {
   const currentModule =
@@ -78,25 +75,6 @@ function RightRail({
             Context
           </h2>
 
-          <button
-            onClick={() => setRightPinned(!rightPinned)}
-            className={`rounded p-1 transition-colors ${
-              rightPinned
-                ? "opacity-100"
-                : "opacity-0 group-hover:opacity-100"
-            } ${
-              theme === "dark"
-                ? "text-zinc-500 hover:text-orange-400"
-                : "text-zinc-600 hover:text-orange-600"
-            }`}
-            title={
-              rightPinned
-                ? "Unpin right rail"
-                : "Pin right rail"
-            }
-          >
-            {rightPinned ? <PinOff size={16} /> : <Pin size={16} />}
-          </button>
         </div>
 
         <div
@@ -162,18 +140,6 @@ function RightRail({
               </p>
             </div>
           </div>
-
-          <button
-            onClick={() => void onDeleteSession?.()}
-            className={`flex w-full items-center justify-center gap-2 mt-4 px-3 py-2 rounded transition-colors ${
-              theme === "dark"
-                ? "bg-red-950 hover:bg-red-900 text-red-300"
-                : "bg-red-100 hover:bg-red-200 text-red-800"
-            }`}
-          >
-            <Trash2 size={16} />
-            <span>Delete Session</span>
-          </button>
         </div>
       </div>
     </aside>
