@@ -12,12 +12,16 @@ import {
   deleteSession,
   switchToFallbackSessionBeforeDelete,
   getSessionCountForProject,
+  getSessionById,
 } from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
 import Workspace from "./components/Workspace";
 import RightRail from "./components/RightRail";
-import { getActiveProjectId } from "./services/ProjectService";
+import {
+  getActiveProjectId,
+  getProjectById,
+} from "./services/ProjectService";
 import { defaultWorkstationStatus } from "./data/defaultWorkstationStatus";
 
 function App() {
@@ -70,6 +74,29 @@ function App() {
     });
   }
 
+  async function refreshWorkstationStatus() {
+    const activeProjectId = await getActiveProjectId();
+    const activeSessionId = await getActiveSessionId();
+
+    const activeProject = activeProjectId
+      ? await getProjectById(activeProjectId)
+      : null;
+
+    const activeSession = activeSessionId
+      ? await getSessionById(activeSessionId)
+      : null;
+
+    setWorkstationStatus((previousStatus) => ({
+      ...previousStatus,
+      activeProject: activeProject
+        ? activeProject.name
+        : "No project selected",
+      activeSession: activeSession
+        ? activeSession.name
+        : "No active session",
+    }));
+  }
+
   async function handleDeleteSession() {
     const sessionId = await getActiveSessionId();
     const projectId = await getActiveProjectId();
@@ -90,6 +117,9 @@ function App() {
 
       setSessionCount(updatedSessionCount);
       await saveCurrentWorkspaceState();
+      await refreshWorkstationStatus();
+
+      window.dispatchEvent(new Event("fretforge:sessions-changed"));
 
       window.alert("Session deleted. FretForge switched to a fallback session.");
     } catch (error) {
@@ -153,6 +183,8 @@ function App() {
         const count = await getSessionCountForProject(activeProjectId);
         setSessionCount(count);
       }
+
+      await refreshWorkstationStatus();
 
       if (workspaceState.activeSessionId) {
         console.log(
@@ -261,7 +293,11 @@ function App() {
           theme={theme}
         />
 
-        <Workspace activeModule={activeModule} theme={theme} />
+        <Workspace
+          activeModule={activeModule}
+          theme={theme}
+          onWorkstationStatusRefresh={refreshWorkstationStatus}
+        />
 
         <RightRail
           activeModule={activeModule}

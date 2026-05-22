@@ -19,19 +19,21 @@ export async function createSession(projectId: number) {
   await db.execute(
     `
     INSERT INTO sessions (
-      project_id,
-      name,
-      created_at,
-      updated_at
-    )
-    VALUES (?, ?, ?, ?)
+    project_id,
+    name,
+    created_at,
+    updated_at,
+    active_workspace
+  )
+  VALUES (?, ?, ?, ?, ?)
     `,
-    [
-      projectId,
-      `Practice Session ${new Date().toLocaleDateString()}`,
-      now,
-      now,
-    ]
+   [
+    projectId,
+    `Practice Session ${new Date().toLocaleDateString()}`,
+    now,
+    now,
+    "forge",
+   ]
   );
 
   return await getMostRecentSessionForProject(projectId);

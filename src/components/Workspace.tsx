@@ -13,6 +13,7 @@ import SessionPanel from "./SessionPanel";
 type WorkspaceProps = {
   activeModule: string;
   theme: string;
+  onWorkstationStatusRefresh: () => Promise<void>;
 };
 
 function getWorkspaceCards(activeModule: string, recentProject: Project | null) {
@@ -95,7 +96,11 @@ function getWorkspaceCards(activeModule: string, recentProject: Project | null) 
   }
 }
 
-function Workspace({ activeModule, theme }: WorkspaceProps) {
+function Workspace({
+  activeModule,
+  theme,
+  onWorkstationStatusRefresh,
+}: WorkspaceProps) {
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [recentProject, setRecentProject] = useState<Project | null>(null);
 
@@ -155,13 +160,17 @@ function Workspace({ activeModule, theme }: WorkspaceProps) {
                 theme={theme}
                 onProjectChanged={async () => {
                   await loadCurrentProject();
+
                   setSessionRefreshKey((current) => current + 1);
+
+                  await onWorkstationStatusRefresh();
                 }}
               />
 
               <SessionPanel
                 theme={theme}
                 refreshKey={sessionRefreshKey}
+                onWorkstationStatusRefresh={onWorkstationStatusRefresh}
               />
             </>
           )}
