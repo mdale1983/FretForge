@@ -51,6 +51,8 @@ function App() {
     const sessionId = await getActiveSessionId();
     const appWindow = getCurrentWindow();
     const isMaximized = await appWindow.isMaximized();
+    const windowPosition = await appWindow.outerPosition();
+    const windowSize = await appWindow.outerSize();
 
     if (!sessionId) return;
 
@@ -60,15 +62,15 @@ function App() {
       activeModule,
       leftRailPinned: leftPinned,
       rightRailPinned: rightPinned,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
+      windowWidth: windowSize.width,
+      windowHeight: windowSize.height,
       screenWidth: window.screen.width,
       screenHeight: window.screen.height,
-      windowX: window.screenX,
-      windowY: window.screenY,
+      windowX: windowPosition.x,
+      windowY: windowPosition.y,
       isMaximized,
-      restoredWindowWidth: isMaximized ? 1400 : window.innerWidth,
-      restoredWindowHeight: isMaximized ? 950 : window.innerHeight,
+      restoredWindowWidth: isMaximized ? 1400 : windowSize.width,
+      restoredWindowHeight: isMaximized ? 950 : windowSize.height,
       lastMonitorLabel: `${window.screen.width}x${window.screen.height}`,
       restoredAt: new Date().toISOString(),
     });
