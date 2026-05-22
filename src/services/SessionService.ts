@@ -292,6 +292,26 @@ export async function getNextAvailableSessionForProject(
   return sessions[0] ?? null;
 }
 
+export async function renameSession(
+  sessionId: number,
+  newName: string
+) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET
+      name = ?,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [newName, now, sessionId]
+  );
+}
+
 export async function switchToFallbackSessionBeforeDelete(
   projectId: number,
   sessionIdToDelete: number

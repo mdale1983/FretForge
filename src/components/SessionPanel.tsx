@@ -5,6 +5,7 @@ import {
   deleteSession,
   getActiveSessionId,
   getSessionsForProject,
+  renameSession,
   setActiveSession,
   switchToFallbackSessionBeforeDelete,
   type Session,
@@ -25,6 +26,9 @@ function SessionPanel({
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [currentActiveSessionId, setCurrentActiveSessionId] =
     useState<number | null>(null);
+  const [renamingSessionId, setRenamingSessionId] =
+    useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   async function loadSessions() {
     const projectId = await getActiveProjectId();
@@ -65,6 +69,23 @@ function SessionPanel({
 
   async function handleSelectSession(sessionId: number) {
     await setActiveSession(sessionId);
+    await loadSessions();
+    await onWorkstationStatusRefresh();
+  }
+
+  async function handleRenameSession(sessionId: number) {
+    const trimmedName = renameValue.trim();
+
+    if (!trimmedName) {
+      window.alert("Session name cannot be empty.");
+      return;
+    }
+
+    await renameSession(sessionId, trimmedName);
+
+    setRenamingSessionId(null);
+    setRenameValue("");
+
     await loadSessions();
     await onWorkstationStatusRefresh();
   }
@@ -191,14 +212,43 @@ function SessionPanel({
               }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div
-                    className={`font-medium ${
-                      theme === "dark" ? "text-zinc-100" : "text-zinc-900"
-                    }`}
-                  >
-                    {session.name}
-                  </div>
+                <div className="min-w-0 flex-1">
+                  {renamingSessionId === session.id ? (
+                    <input
+                      value={renameValue}
+                      autoFocus
+                      onChange={(event) =>
+                        setRenameValue(event.target.value)
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleRenameSession(session.id);
+                        }
+
+                        if (event.key === "Escape") {
+                          setRenamingSessionId(null);
+                          setRenameValue("");
+                        }
+                      }}
+                      className={`w-full rounded-md border px-2 py-1 text-sm outline-none ${
+                        theme === "dark"
+                          ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                          : "border-zinc-300 bg-white text-zinc-900"
+                      }`}
+                    />
+                  ) : (
+                    <div
+                      className={`font-medium ${
+                        theme === "dark"
+                          ? "text-zinc-100"
+                          : "text-zinc-900"
+                      }`}
+                    >
+                      {session.name}
+                    </div>
+                  )}
 
                   <div className="mt-1 text-xs text-zinc-500">
                     Session #{session.id}
@@ -210,20 +260,38 @@ function SessionPanel({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleDeleteSession(session.id);
-                  }}
-                  className={`shrink-0 rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
-                    theme === "dark"
-                      ? "border-red-500/40 text-red-300 hover:bg-red-500/10"
-                      : "border-red-400 text-red-600 hover:bg-red-50"
-                  }`}
-                >
-                  Delete
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setRenamingSessionId(session.id);
+                      setRenameValue(session.name);
+                    }}
+                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                      theme === "dark"
+                        ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+                        : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                    }`}
+                  >
+                    Rename
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDeleteSession(session.id);
+                    }}
+                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                      theme === "dark"
+                        ? "border-red-500/40 text-red-300 hover:bg-red-500/10"
+                        : "border-red-400 text-red-600 hover:bg-red-50"
+                    }`}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           );
