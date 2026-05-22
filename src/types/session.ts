@@ -2,6 +2,7 @@ export type Session = {
   id: number;
   project_id: number;
   name: string;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };

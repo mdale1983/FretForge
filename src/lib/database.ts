@@ -39,6 +39,7 @@ export async function initializeDatabase() {
       name TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      notes TEXT,
       active_workspace TEXT NOT NULL DEFAULT 'forge',
       FOREIGN KEY(project_id) REFERENCES projects(id)
     );
@@ -48,6 +49,15 @@ export async function initializeDatabase() {
     await database.execute(`
       ALTER TABLE sessions
       ADD COLUMN active_workspace TEXT NOT NULL DEFAULT 'forge'
+    `);
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await database.execute(`
+      ALTER TABLE sessions
+      ADD COLUMN notes TEXT
     `);
   } catch {
     // Column already exists

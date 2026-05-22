@@ -8,6 +8,7 @@ import {
   renameSession,
   setActiveSession,
   switchToFallbackSessionBeforeDelete,
+  updateSessionNotes,
   type Session,
 } from "../services/SessionService";
 
@@ -29,6 +30,11 @@ function SessionPanel({
   const [renamingSessionId, setRenamingSessionId] =
     useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  const [editingNotesSessionId, setEditingNotesSessionId] =
+    useState<number | null>(null);
+
+  const [notesValue, setNotesValue] = useState("");
 
   async function loadSessions() {
     const projectId = await getActiveProjectId();
@@ -85,6 +91,16 @@ function SessionPanel({
 
     setRenamingSessionId(null);
     setRenameValue("");
+
+    await loadSessions();
+    await onWorkstationStatusRefresh();
+  }
+
+  async function handleSaveSessionNotes(sessionId: number) {
+    await updateSessionNotes(sessionId, notesValue);
+
+    setEditingNotesSessionId(null);
+    setNotesValue("");
 
     await loadSessions();
     await onWorkstationStatusRefresh();
@@ -211,7 +227,7 @@ function SessionPanel({
                   : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-200"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3">
                 <div className="min-w-0 flex-1">
                   {renamingSessionId === session.id ? (
                     <input
@@ -258,9 +274,72 @@ function SessionPanel({
                   <div className="text-xs text-zinc-500">
                     {new Date(session.updated_at).toLocaleString()}
                   </div>
+
+                  <div className="mt-3">
+                    {editingNotesSessionId === session.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={notesValue}
+                          autoFocus
+                          onChange={(event) => setNotesValue(event.target.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          rows={4}
+                          className={`w-full resize-none rounded-md border px-3 py-2 text-xs outline-none ${
+                            theme === "dark"
+                              ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                              : "border-zinc-300 bg-white text-zinc-900"
+                          }`}
+                        />
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleSaveSessionNotes(session.id);
+                            }}
+                            className={`rounded-md border px-3 py-1 text-xs font-medium ${
+                              theme === "dark"
+                                ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                                : "border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                            }`}
+                          >
+                            Save Notes
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setEditingNotesSessionId(null);
+                              setNotesValue("");
+                            }}
+                            className={`rounded-md border px-3 py-1 text-xs font-medium ${
+                              theme === "dark"
+                                ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+                                : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                            }`}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${
+                          theme === "dark"
+                            ? "border-zinc-800 bg-zinc-950 text-zinc-400"
+                            : "border-zinc-300 bg-zinc-50 text-zinc-600"
+                        }`}
+                      >
+                        {session.notes?.trim() || "No notes yet."}
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
-                <div className="flex shrink-0 gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={(event) => {
@@ -275,6 +354,22 @@ function SessionPanel({
                     }`}
                   >
                     Rename
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingNotesSessionId(session.id);
+                      setNotesValue(session.notes ?? "");
+                    }}
+                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                      theme === "dark"
+                        ? "border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
+                        : "border-blue-400 text-blue-700 hover:bg-blue-50"
+                    }`}
+                  >
+                    Edit Notes
                   </button>
 
                   <button

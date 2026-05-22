@@ -312,6 +312,26 @@ export async function renameSession(
   );
 }
 
+export async function updateSessionNotes(
+  sessionId: number,
+  notes: string
+) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET
+      notes = ?,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [notes, now, sessionId]
+  );
+}
+
 export async function switchToFallbackSessionBeforeDelete(
   projectId: number,
   sessionIdToDelete: number
