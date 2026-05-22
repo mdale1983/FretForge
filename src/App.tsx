@@ -18,6 +18,7 @@ import LeftRail from "./components/LeftRail";
 import Workspace from "./components/Workspace";
 import RightRail from "./components/RightRail";
 import { getActiveProjectId } from "./services/ProjectService";
+import { defaultWorkstationStatus } from "./data/defaultWorkstationStatus";
 
 function App() {
   const [activeModule, setActiveModule] = useState(
@@ -37,6 +38,10 @@ function App() {
   );
 
   const [sessionCount, setSessionCount] = useState(0);
+
+  const [workstationStatus, setWorkstationStatus] = useState(
+    defaultWorkstationStatus
+  );
 
   async function saveCurrentWorkspaceState() {
     const sessionId = await getActiveSessionId();
@@ -241,9 +246,10 @@ function App() {
       }`}
     >
       <ForgeStatusBar
-        version="v0.6.3 — Session Workspace Restoration"
+        version="v0.6.4 — Workstation Dashboard"
         theme={theme}
         setTheme={setTheme}
+        workstationStatus={workstationStatus}
       />
 
       <div className="flex h-[calc(100vh-3rem)]">
