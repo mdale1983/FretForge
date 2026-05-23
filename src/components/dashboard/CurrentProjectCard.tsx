@@ -1,4 +1,5 @@
-import { Project, Session } from "../../types/project";
+import { Project } from "../../types/project";
+import { Session } from "../../types/session";
 
 type CurrentProjectCardProps = {
   project: Project | null;

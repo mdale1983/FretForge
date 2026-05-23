@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { modules } from "../data/modules";
-import { Project, Session } from "../types/project";
+import { Project } from "../types/project";
+import { Session } from "../types/session";
 import CurrentProjectCard from "./dashboard/CurrentProjectCard";
 import CurrentSessionCard from "./dashboard/CurrentSessionCard";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../services/SessionService";
 import ProjectPanel from "./ProjectPanel";
 import SessionPanel from "./SessionPanel";
+import ForgePulseWorkspace from "./workspaces/ForgePulseWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -23,44 +25,7 @@ type WorkspaceProps = {
   onWorkstationStatusRefresh: () => Promise<void>;
 };
 
-function formatProjectDate(value: string | null | undefined) {
-  if (!value) return "Unknown";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-
-  return date.toLocaleString();
-}
-
-function getCurrentProjectBody(
-  recentProject: Project | null,
-  activeSession: Session | null,
-  projectSessionCount: number
-) {
-  if (!recentProject) {
-    return "No project loaded.";
-  }
-
-  return [
-    recentProject.name,
-    "",
-    `Active Session: ${activeSession ? activeSession.name : "No active session"}`,
-    `Sessions: ${projectSessionCount}`,
-    `Created: ${formatProjectDate(recentProject.created_at)}`,
-    `Updated: ${formatProjectDate(recentProject.updated_at)}`,
-    "Status: Active",
-  ].join("\n");
-}
-
-function getWorkspaceCards(
-  activeModule: string,
-  recentProject: Project | null,
-  activeSession: Session | null,
-  projectSessionCount: number
-) {
+function getWorkspaceCards(activeModule: string) {
   switch (activeModule) {
     case "rhythm":
       return [
@@ -112,11 +77,7 @@ function getWorkspaceCards(
       ];
 
     case "pulse":
-      return [
-        ["ForgePulse", "Metronome engine placeholder."],
-        ["BPM", "Current BPM: 120"],
-        ["Subdivision", "Quarter notes"],
-      ];
+      return [];
 
     case "tone":
       return [
@@ -188,12 +149,7 @@ function Workspace({
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
 
-  const workspaceCards = getWorkspaceCards(
-    activeModule,
-    recentProject,
-    activeSession,
-    projectSessionCount
-  );
+  const workspaceCards = getWorkspaceCards(activeModule);
 
   return (
     <main
@@ -286,6 +242,12 @@ function Workspace({
                 theme={theme}
               />
             </>
+          )}
+
+          {activeModule === "pulse" && (
+            <div className="col-span-full">
+              <ForgePulseWorkspace theme={theme} />
+            </div>
           )}
 
           {workspaceCards.map(([title, body]) => (

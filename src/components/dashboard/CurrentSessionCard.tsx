@@ -1,4 +1,4 @@
-import { Session } from "../../types/project";
+import { Session } from "../../types/session";
 
 type CurrentSessionCardProps = {
   activeSession: Session | null;
