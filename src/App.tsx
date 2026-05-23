@@ -9,8 +9,6 @@ import {
   setSessionWorkspace,
   saveWorkspaceState,
   loadWorkspaceState,
-  deleteSession,
-  switchToFallbackSessionBeforeDelete,
   getSessionCountForProject,
   getSessionById,
 } from "./services/SessionService";
@@ -22,12 +20,7 @@ import {
   getActiveProjectId,
   getProjectById,
 } from "./services/projectService";
-import { defaultWorkstationStatus } from "./data/defaultWorkstationStatus";
-import {
-  AudioDeviceInfo,
-  getWorkstationTelemetry,
-  listAudioOutputDevices,
-} from "./services/workstationTelemetryService";
+import { useWorkstationTelemetry } from "./hooks/useWorkstationTelemetry";
 
 function App() {
   const [activeModule, setActiveModule] = useState(
@@ -48,15 +41,13 @@ function App() {
 
   const [sessionCount, setSessionCount] = useState(0);
 
-  const [workstationStatus, setWorkstationStatus] = useState(
-    defaultWorkstationStatus
-  );
-
-  const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([]);
-
-  const [selectedAudioDevice, setSelectedAudioDevice] = useState(
-    localStorage.getItem("fretforge.selectedAudioDevice") ?? ""
-  );
+  const {
+    workstationStatus,
+    setWorkstationStatus,
+    audioDevices,
+    selectedAudioDevice,
+    setSelectedAudioDevice,
+  } = useWorkstationTelemetry();
 
   async function saveCurrentWorkspaceState() {
     const sessionId = await getActiveSessionId();
@@ -108,78 +99,6 @@ function App() {
         ? activeSession.name
         : "No active session",
     }));
-  }
-
-  async function refreshSystemTelemetry() {
-    try {
-     const telemetry = await getWorkstationTelemetry();
-     const detectedAudioDevices = await listAudioOutputDevices();
-
-     setAudioDevices(detectedAudioDevices);
-     const preferredAudioDevice =
-      detectedAudioDevices.find(
-        (device) => device.name === selectedAudioDevice
-      ) ?? detectedAudioDevices.find((device) => device.is_default_output);
-
-     console.log("Detected audio output devices:", audioDevices);
-
-      setWorkstationStatus((previousStatus) => ({
-        ...previousStatus,
-        cpu: `CPU ${telemetry.cpu_usage.toFixed(0)}%`,
-        ram: `RAM ${(telemetry.ram_used_mb / 1024).toFixed(1)} / ${(telemetry.ram_total_mb / 1024).toFixed(1)} GB`,
-        gpu: telemetry.gpu_name,
-        audioDevice: preferredAudioDevice?.name ?? telemetry.audio_device,
-        sampleRate: preferredAudioDevice?.sample_rate ?? telemetry.sample_rate,
-        bufferSize: telemetry.buffer_size,
-        latency: telemetry.latency,
-      }));
-    } catch (error) {
-      console.error("Telemetry refresh failed:", error);
-    }
-  }
-
-  useEffect(() => {
-    refreshSystemTelemetry();
-
-    const telemetryInterval = window.setInterval(() => {
-      refreshSystemTelemetry();
-    }, 5000);
-
-    return () => {
-      window.clearInterval(telemetryInterval);
-    };
-  }, []);
-
-  async function handleDeleteSession() {
-    const sessionId = await getActiveSessionId();
-    const projectId = await getActiveProjectId();
-
-    if (!sessionId) return;
-    if (!projectId) return;
-
-    const confirmed = window.confirm(
-      "Delete this session? This cannot be undone."
-    );
-
-    if (!confirmed) return;
-
-    try {
-      await switchToFallbackSessionBeforeDelete(projectId, sessionId);
-      await deleteSession(sessionId);
-      const updatedSessionCount =
-        await getSessionCountForProject(projectId);
-
-      setSessionCount(updatedSessionCount);
-      await saveCurrentWorkspaceState();
-      await refreshWorkstationStatus();
-
-      window.dispatchEvent(new Event("fretforge:sessions-changed"));
-
-      window.alert("Session deleted. FretForge switched to a fallback session.");
-    } catch (error) {
-      console.warn("Session delete failed:", error);
-      window.alert("Could not delete session safely.");
-    }
   }
 
   useEffect(() => {
@@ -271,13 +190,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem("fretforge.activeModule", activeModule);
   }, [activeModule]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "fretforge.selectedAudioDevice",
-      selectedAudioDevice
-    );
-  }, [selectedAudioDevice]);
 
   useEffect(() => {
     async function persistWorkspace() {

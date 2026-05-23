@@ -1,11 +1,13 @@
-export type Session = {
+export interface Session {
   id: number;
   project_id: number;
   name: string;
-  notes: string | null;
+  notes?: string | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
-};
+  active_workspace?: string | null;
+}
 
 export interface SessionWorkspaceState {
   activeProjectId: number | null;

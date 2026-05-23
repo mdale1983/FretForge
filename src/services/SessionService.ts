@@ -1,17 +1,11 @@
 import { getDatabase } from "../lib/database";
 import { getAppState, setAppState } from "./AppStateService";
-import { SessionWorkspaceState } from "../types/session";
+import {
+  Session,
+  SessionWorkspaceState,
+} from "../types/session";
 
-export interface Session {
-  id: number;
-  project_id: number;
-  name: string;
-  notes?: string | null;
-  completed_at?: string | null;
-  created_at: string;
-  updated_at: string;
-  active_workspace: string;
-}
+export type { Session };
 
 export async function createSession(projectId: number) {
   const db = await getDatabase();
