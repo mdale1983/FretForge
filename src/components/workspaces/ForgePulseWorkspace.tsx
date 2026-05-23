@@ -64,7 +64,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         persistence are intentionally not wired yet.
       </p>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <SettingsCard theme={theme} title="Current BPM">
           <input
             className={`mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none ${
@@ -140,38 +140,55 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
             />
           </div>
         </SettingsCard>
-        <SettingsCard theme={theme} title="Transport">
-            <div className="mt-3">
-                <p
-                className={`text-sm ${
-                    theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-                }`}
-                >
-                Status: {transportStatus}
-                </p>
-                <div className="mt-4 flex gap-3">
-                    <button
-                        type="button"
-                        onClick={() => setTransportStatus("playing")}
-                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white"
+        <div className="lg:col-span-2">
+            <SettingsCard theme={theme} title="Transport">
+                <div className="mt-3">
+                    <p
+                    className={`text-sm ${
+                        theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+                    }`}
                     >
-                        Start
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setTransportStatus("idle")}
-                        className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
-                        theme === "dark"
-                            ? "border-zinc-700 text-zinc-100"
-                            : "border-zinc-300 text-zinc-900"
+                    Status: {transportStatus}
+                    </p>
+                    <p
+                        className={`mt-1 text-sm ${
+                            theme === "dark" ? "text-zinc-500" : "text-zinc-500"
                         }`}
-                    >
-                        Stop
-                    </button>
+                        >
+                        BPM: {bpm} • {subdivision}
+                    </p>
+                    <p
+                        className={`mt-1 text-sm ${
+                            theme === "dark" ? "text-zinc-500" : "text-zinc-500"
+                        }`}
+                        >
+                        Count-In: {countInEnabled ? "Enabled" : "Disabled"} • Timer:{" "}
+                        {timerEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between">
+                        <button
+                            type="button"
+                            onClick={() => setTransportStatus("playing")}
+                            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white"
+                        >
+                            Start Metronome
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setTransportStatus("idle")}
+                            className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+                            theme === "dark"
+                                ? "border-zinc-700 text-zinc-100"
+                                : "border-zinc-300 text-zinc-900"
+                            }`}
+                        >
+                            Stop Metronome
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </SettingsCard>
+            </SettingsCard>
+        </div>
       </div>
     </section>
   );
