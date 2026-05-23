@@ -19,6 +19,12 @@ struct WorkstationTelemetry {
     latency: String,
 }
 
+#[derive(Serialize)]
+struct AudioDeviceInfo {
+    name: String,
+    is_default_output: bool,
+}
+
 struct CachedDeviceTelemetry {
     gpu_name: String,
     audio_device: String,
@@ -86,6 +92,30 @@ fn detect_audio_device_cpal() -> String {
         },
         None => "No Audio Device".to_string(),
     }
+}
+
+#[tauri::command]
+fn list_audio_output_devices() -> Vec<AudioDeviceInfo> {
+    let host = cpal::default_host();
+
+    let default_name = host
+        .default_output_device()
+        .and_then(|device| device.name().ok());
+
+    let Ok(devices) = host.output_devices() else {
+        return Vec::new();
+    };
+
+    devices
+        .filter_map(|device| {
+            let name = device.name().ok()?;
+
+            Some(AudioDeviceInfo {
+                is_default_output: default_name.as_ref() == Some(&name),
+                name,
+            })
+        })
+        .collect()
 }
 
 fn detect_sample_rate_cpal() -> String {
@@ -162,7 +192,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
-            get_workstation_telemetry
+            get_workstation_telemetry,
+            list_audio_output_devices
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getActiveProjectId } from "../services/ProjectService";
+import { getActiveProjectId } from "../services/projectService";
 import {
   completeSession,
   getCompletedSessionsForProject,

@@ -21,9 +21,13 @@ import RightRail from "./components/RightRail";
 import {
   getActiveProjectId,
   getProjectById,
-} from "./services/ProjectService";
+} from "./services/projectService";
 import { defaultWorkstationStatus } from "./data/defaultWorkstationStatus";
-import { getWorkstationTelemetry } from "./services/workstationTelemetryService";
+import {
+  AudioDeviceInfo,
+  getWorkstationTelemetry,
+  listAudioOutputDevices,
+} from "./services/workstationTelemetryService";
 
 function App() {
   const [activeModule, setActiveModule] = useState(
@@ -46,6 +50,12 @@ function App() {
 
   const [workstationStatus, setWorkstationStatus] = useState(
     defaultWorkstationStatus
+  );
+
+  const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([]);
+
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState(
+    localStorage.getItem("fretforge.selectedAudioDevice") ?? ""
   );
 
   async function saveCurrentWorkspaceState() {
@@ -102,14 +112,23 @@ function App() {
 
   async function refreshSystemTelemetry() {
     try {
-      const telemetry = await getWorkstationTelemetry();
+     const telemetry = await getWorkstationTelemetry();
+     const detectedAudioDevices = await listAudioOutputDevices();
+
+     setAudioDevices(detectedAudioDevices);
+     const preferredAudioDevice =
+      detectedAudioDevices.find(
+        (device) => device.name === selectedAudioDevice
+      ) ?? detectedAudioDevices.find((device) => device.is_default_output);
+
+     console.log("Detected audio output devices:", audioDevices);
 
       setWorkstationStatus((previousStatus) => ({
         ...previousStatus,
         cpu: `CPU ${telemetry.cpu_usage.toFixed(0)}%`,
         ram: `RAM ${(telemetry.ram_used_mb / 1024).toFixed(1)} / ${(telemetry.ram_total_mb / 1024).toFixed(1)} GB`,
         gpu: telemetry.gpu_name,
-        audioDevice: telemetry.audio_device,
+        audioDevice: preferredAudioDevice?.name ?? telemetry.audio_device,
         sampleRate: telemetry.sample_rate,
         bufferSize: telemetry.buffer_size,
         latency: telemetry.latency,
@@ -136,6 +155,7 @@ function App() {
     const projectId = await getActiveProjectId();
 
     if (!sessionId) return;
+    if (!projectId) return;
 
     const confirmed = window.confirm(
       "Delete this session? This cannot be undone."
@@ -253,6 +273,13 @@ function App() {
   }, [activeModule]);
 
   useEffect(() => {
+    localStorage.setItem(
+      "fretforge.selectedAudioDevice",
+      selectedAudioDevice
+    );
+  }, [selectedAudioDevice]);
+
+  useEffect(() => {
     async function persistWorkspace() {
       const sessionId = await getActiveSessionId();
 
@@ -316,6 +343,9 @@ function App() {
         theme={theme}
         setTheme={setTheme}
         workstationStatus={workstationStatus}
+        audioDevices={audioDevices}
+        selectedAudioDevice={selectedAudioDevice}
+        setSelectedAudioDevice={setSelectedAudioDevice}
       />
 
       <div className="flex flex-1 min-h-0">

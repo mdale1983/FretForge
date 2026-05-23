@@ -6,6 +6,12 @@ type ForgeStatusBarProps = {
   theme: string;
   setTheme: (theme: string) => void;
   workstationStatus: WorkstationStatus;
+  audioDevices: {
+    name: string;
+    is_default_output: boolean;
+  }[];
+  selectedAudioDevice: string;
+  setSelectedAudioDevice: (device: string) => void;
 };
 
 type TuningOption = {
@@ -45,6 +51,9 @@ function ForgeStatusBar({
   theme,
   setTheme,
   workstationStatus,
+  audioDevices,
+  selectedAudioDevice,
+  setSelectedAudioDevice,
 }: ForgeStatusBarProps) {
   const [stringCount, setStringCount] = useState<6 | 7 | 8>(6);
   const [selectedTuning, setSelectedTuning] = useState<TuningOption>(
@@ -149,11 +158,22 @@ function ForgeStatusBar({
           </div>
 
           <div className="flex flex-col items-center gap-1.5">
-            <div
-              className={`w-64 rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
+            <select
+              value={selectedAudioDevice}
+              onChange={(event) =>
+                setSelectedAudioDevice(event.target.value)
+              }
+              className={`w-64 rounded-md border px-3 py-1 text-xs font-medium outline-none ${selectClass}`}
             >
-              {workstationStatus.audioDevice}
-            </div>
+              {audioDevices.map((device) => (
+                <option
+                  key={device.name}
+                  value={device.name}
+                >
+                  {device.name}
+                </option>
+              ))}
+            </select>
 
             <div
               className={`w-64 rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}

@@ -10,7 +10,7 @@ import {
   renameProject,
   setActiveProject,
   updateProjectNotes,
-} from "../services/ProjectService";
+} from "../services/projectService";
 import { Project } from "../types/project";
 
 type ProjectPanelProps = {

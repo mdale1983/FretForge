@@ -8,7 +8,7 @@ import {
   getMostRecentProject,
   getProjectById,
   setActiveProject,
-} from "../services/ProjectService";
+} from "../services/projectService";
 import {
   getActiveSessionId,
   getSessionById,

@@ -10,3 +10,8 @@ export interface WorkstationTelemetry {
   buffer_size: string;
   latency: string;
 }
+
+export interface AudioDeviceInfo {
+  name: string;
+  is_default_output: boolean;
+}
