@@ -35,13 +35,15 @@ function SettingsCard({ theme, title, children }: SettingsCardProps) {
 }
 
 function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
-  const [bpm, setBpm] = useState<number>(120);
-  const [subdivision, setSubdivision] =
-    useState<Subdivision>("quarter");
-  const [countInEnabled, setCountInEnabled] = useState(false);
-  const [timerEnabled, setTimerEnabled] = useState(false);
-  const [transportStatus, setTransportStatus] =
-    useState<TransportStatus>("idle");
+    const [bpm, setBpm] = useState<number>(120);
+    const [subdivision, setSubdivision] =
+        useState<Subdivision>("quarter");
+    const [countInEnabled, setCountInEnabled] = useState(false);
+    const [timerEnabled, setTimerEnabled] = useState(false);
+    const [transportStatus, setTransportStatus] =
+        useState<TransportStatus>("idle");
+    const [accentEnabled, setAccentEnabled] = useState(true);
+    const [currentBeat] = useState(1);
 
   return (
     <section
@@ -140,6 +142,26 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
             />
           </div>
         </SettingsCard>
+        <SettingsCard theme={theme} title="Accent Beat">
+            <div className="mt-1 flex items-center justify-between gap-4">
+                <p
+                className={`text-sm ${
+                    theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+                }`}
+                >
+                Emphasize the first beat of each measure.
+                </p>
+
+                <input
+                type="checkbox"
+                checked={accentEnabled}
+                onChange={(event) =>
+                    setAccentEnabled(event.target.checked)
+                }
+                className="h-4 w-4"
+                />
+            </div>
+        </SettingsCard>
         <div className="lg:col-span-2">
             <SettingsCard theme={theme} title="Transport">
                 <div className="mt-3">
@@ -165,6 +187,32 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                         Count-In: {countInEnabled ? "Enabled" : "Disabled"} • Timer:{" "}
                         {timerEnabled ? "Enabled" : "Disabled"}
                     </p>
+                    <>
+                        <p
+                            className={`mt-1 text-sm ${
+                                theme === "dark" ? "text-zinc-500" : "text-zinc-500"
+                            }`}
+                        >
+                            Accent Beat: {accentEnabled ? "Enabled" : "Disabled"}
+                        </p>
+
+                        <p
+                            className={`mt-1 text-sm ${
+                                theme === "dark" ? "text-zinc-500" : "text-zinc-500"
+                            }`}
+                        >
+                            Current Beat: {currentBeat}
+                        </p>
+                    </>
+                    <p
+                        className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                            theme === "dark"
+                            ? "border-zinc-800 bg-zinc-900 text-zinc-500"
+                            : "border-zinc-200 bg-white text-zinc-600"
+                        }`}
+                        >
+                        Audio engine not connected yet. Transport controls are UI-only.
+                    </p>
                     <div className="mt-4 flex items-center justify-between">
                         <button
                             type="button"
@@ -185,6 +233,25 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                         >
                             Stop Metronome
                         </button>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        <div
+                            className={`h-3 w-3 rounded-full ${
+                            transportStatus === "playing"
+                                ? "bg-green-500"
+                                : "bg-zinc-500"
+                            }`}
+                        />
+
+                        <span
+                            className={`text-sm ${
+                            theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+                            }`}
+                        >
+                            {transportStatus === "playing"
+                            ? "Metronome armed"
+                            : "Metronome stopped"}
+                        </span>
                     </div>
                 </div>
             </SettingsCard>
