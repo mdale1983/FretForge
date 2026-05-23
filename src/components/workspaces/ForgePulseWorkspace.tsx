@@ -1,6 +1,10 @@
 import { type ReactNode, useState } from "react";
 
 type Subdivision = "quarter" | "eighth" | "triplet" | "sixteenth";
+type TransportStatus =
+  | "idle"
+  | "ready"
+  | "playing";
 
 type ForgePulseWorkspaceProps = {
   theme: string;
@@ -36,6 +40,8 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     useState<Subdivision>("quarter");
   const [countInEnabled, setCountInEnabled] = useState(false);
   const [timerEnabled, setTimerEnabled] = useState(false);
+  const [transportStatus, setTransportStatus] =
+    useState<TransportStatus>("idle");
 
   return (
     <section
@@ -133,6 +139,38 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
               className="h-4 w-4"
             />
           </div>
+        </SettingsCard>
+        <SettingsCard theme={theme} title="Transport">
+            <div className="mt-3">
+                <p
+                className={`text-sm ${
+                    theme === "dark" ? "text-zinc-400" : "text-zinc-600"
+                }`}
+                >
+                Status: {transportStatus}
+                </p>
+                <div className="mt-4 flex gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setTransportStatus("playing")}
+                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                        Start
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setTransportStatus("idle")}
+                        className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+                        theme === "dark"
+                            ? "border-zinc-700 text-zinc-100"
+                            : "border-zinc-300 text-zinc-900"
+                        }`}
+                    >
+                        Stop
+                    </button>
+                </div>
+            </div>
         </SettingsCard>
       </div>
     </section>
