@@ -23,6 +23,7 @@ struct WorkstationTelemetry {
 struct AudioDeviceInfo {
     name: String,
     is_default_output: bool,
+    sample_rate: String,
 }
 
 struct CachedDeviceTelemetry {
@@ -110,8 +111,14 @@ fn list_audio_output_devices() -> Vec<AudioDeviceInfo> {
         .filter_map(|device| {
             let name = device.name().ok()?;
 
+            let sample_rate = match device.default_output_config() {
+                Ok(config) => format!("{} kHz", config.sample_rate().0 / 1000),
+                Err(_) => "Rate Unknown".to_string(),
+            };
+
             Some(AudioDeviceInfo {
                 is_default_output: default_name.as_ref() == Some(&name),
+                sample_rate,
                 name,
             })
         })

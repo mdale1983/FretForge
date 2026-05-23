@@ -129,7 +129,7 @@ function App() {
         ram: `RAM ${(telemetry.ram_used_mb / 1024).toFixed(1)} / ${(telemetry.ram_total_mb / 1024).toFixed(1)} GB`,
         gpu: telemetry.gpu_name,
         audioDevice: preferredAudioDevice?.name ?? telemetry.audio_device,
-        sampleRate: telemetry.sample_rate,
+        sampleRate: preferredAudioDevice?.sample_rate ?? telemetry.sample_rate,
         bufferSize: telemetry.buffer_size,
         latency: telemetry.latency,
       }));

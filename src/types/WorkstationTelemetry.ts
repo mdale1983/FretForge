@@ -14,4 +14,5 @@ export interface WorkstationTelemetry {
 export interface AudioDeviceInfo {
   name: string;
   is_default_output: boolean;
+  sample_rate: string;
 }
