@@ -18,16 +18,36 @@ export async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      notes TEXT,
+      completed_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
   `);
 
+  try {
+    await database.execute(`
+      ALTER TABLE projects
+      ADD COLUMN notes TEXT
+    `);
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await database.execute(`
+      ALTER TABLE projects
+      ADD COLUMN completed_at TEXT
+    `);
+  } catch {
+    // Column already exists
+  }
+
   await database.execute(`
     CREATE TABLE IF NOT EXISTS app_state (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     )
   `);
 
@@ -40,6 +60,7 @@ export async function initializeDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       notes TEXT,
+      completed_at TEXT,
       active_workspace TEXT NOT NULL DEFAULT 'forge',
       FOREIGN KEY(project_id) REFERENCES projects(id)
     );
@@ -58,6 +79,15 @@ export async function initializeDatabase() {
     await database.execute(`
       ALTER TABLE sessions
       ADD COLUMN notes TEXT
+    `);
+  } catch {
+    // Column already exists
+  }
+
+  try {
+    await database.execute(`
+      ALTER TABLE sessions
+      ADD COLUMN completed_at TEXT
     `);
   } catch {
     // Column already exists

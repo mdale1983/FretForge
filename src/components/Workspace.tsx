@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { modules } from "../data/modules";
-import { Project } from "../types/project";
+import { Project, Session } from "../types/project";
+import CurrentProjectCard from "./dashboard/CurrentProjectCard";
+import CurrentSessionCard from "./dashboard/CurrentSessionCard";
 import {
   getActiveProjectId,
   getMostRecentProject,
   getProjectById,
   setActiveProject,
 } from "../services/ProjectService";
+import {
+  getActiveSessionId,
+  getSessionById,
+  getSessionCountForProject,
+} from "../services/SessionService";
 import ProjectPanel from "./ProjectPanel";
 import SessionPanel from "./SessionPanel";
 
@@ -16,7 +23,44 @@ type WorkspaceProps = {
   onWorkstationStatusRefresh: () => Promise<void>;
 };
 
-function getWorkspaceCards(activeModule: string, recentProject: Project | null) {
+function formatProjectDate(value: string | null | undefined) {
+  if (!value) return "Unknown";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return date.toLocaleString();
+}
+
+function getCurrentProjectBody(
+  recentProject: Project | null,
+  activeSession: Session | null,
+  projectSessionCount: number
+) {
+  if (!recentProject) {
+    return "No project loaded.";
+  }
+
+  return [
+    recentProject.name,
+    "",
+    `Active Session: ${activeSession ? activeSession.name : "No active session"}`,
+    `Sessions: ${projectSessionCount}`,
+    `Created: ${formatProjectDate(recentProject.created_at)}`,
+    `Updated: ${formatProjectDate(recentProject.updated_at)}`,
+    "Status: Active",
+  ].join("\n");
+}
+
+function getWorkspaceCards(
+  activeModule: string,
+  recentProject: Project | null,
+  activeSession: Session | null,
+  projectSessionCount: number
+) {
   switch (activeModule) {
     case "rhythm":
       return [
@@ -83,15 +127,6 @@ function getWorkspaceCards(activeModule: string, recentProject: Project | null) 
 
     default:
       return [
-        [
-          "Current Project",
-          recentProject ? recentProject.name : "No project loaded.",
-        ],
-        ["ForgeTune", "Live tuner monitor placeholder."],
-        ["ForgePulse", "Metronome and timing trainer placeholder."],
-        ["Tone Lab", "Amp, IR, EQ, and pedal-chain storage."],
-        ["Storage", "NAS primary. Local recovery fallback."],
-        ["Privacy", "No telemetry. No accounts. No hidden uploads."],
       ];
   }
 }
@@ -103,6 +138,21 @@ function Workspace({
 }: WorkspaceProps) {
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [recentProject, setRecentProject] = useState<Project | null>(null);
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [projectSessionCount, setProjectSessionCount] = useState(0);
+
+  async function refreshProjectSessionDetails(project: Project) {
+    const activeSessionId = await getActiveSessionId();
+
+    const currentSession = activeSessionId
+      ? await getSessionById(activeSessionId)
+      : null;
+
+    const sessionCount = await getSessionCountForProject(project.id);
+
+    setActiveSession(currentSession);
+    setProjectSessionCount(sessionCount);
+  }
 
   async function loadCurrentProject() {
     const activeProjectId = await getActiveProjectId();
@@ -112,16 +162,23 @@ function Workspace({
 
       if (activeProject) {
         setRecentProject(activeProject);
+        await refreshProjectSessionDetails(activeProject);
         return;
       }
     }
 
-    const recentProject = await getMostRecentProject();
+    const mostRecentProject = await getMostRecentProject();
 
-    if (recentProject) {
-      await setActiveProject(recentProject.id);
-      setRecentProject(recentProject);
+    if (mostRecentProject) {
+      await setActiveProject(mostRecentProject.id);
+      setRecentProject(mostRecentProject);
+      await refreshProjectSessionDetails(mostRecentProject);
+      return;
     }
+
+    setRecentProject(null);
+    setActiveSession(null);
+    setProjectSessionCount(0);
   }
 
   useEffect(() => {
@@ -130,30 +187,72 @@ function Workspace({
 
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
-    const workspaceCards = getWorkspaceCards(activeModule, recentProject);
+
+  const workspaceCards = getWorkspaceCards(
+    activeModule,
+    recentProject,
+    activeSession,
+    projectSessionCount
+  );
 
   return (
     <main
-      className={`flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 ${
+      className={`flex-1 overflow-auto px-4 pt-0 pb-32 sm:px-6 lg:px-8 ${
         theme === "dark" ? "bg-zinc-950" : "bg-zinc-100"
       }`}
     >
       <section className="w-full max-w-[1600px] mx-auto">
-        <div className="mb-8">
+        <div
+          className={`sticky top-0 z-50 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-4 mb-8 ${
+            theme === "dark"
+              ? "bg-zinc-950 border-b border-zinc-800"
+              : "bg-zinc-100 border-b border-zinc-300"
+          }`}
+        >
           <h1 className="text-3xl sm:text-4xl font-bold text-orange-400 tracking-tight mb-3">
             {currentModule.name}
           </h1>
 
           <p
-            className={`max-w-3xl text-sm sm:text-base leading-relaxed ${
+            className={`max-w-3xl text-sm sm:text-base leading-relaxed mb-4 ${
               theme === "dark" ? "text-zinc-400" : "text-zinc-600"
             }`}
           >
             {currentModule.description}
           </p>
+
+          {activeModule === "forge" && (
+            <div className="flex flex-wrap gap-3">
+              <button
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  theme === "dark"
+                    ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
+                    : "bg-zinc-200 hover:bg-zinc-300 text-zinc-900"
+                }`}
+                onClick={() =>
+                  window.alert(
+                    [
+                      "FretForge Privacy & Data",
+                      "",
+                      "• No telemetry",
+                      "• No hidden uploads",
+                      "• No mandatory accounts",
+                      "• User-owned data",
+                      "• Local-first operation",
+                      "• Exportable projects",
+                      "• Portable backups",
+                      "• PII rejected before save",
+                    ].join("\n")
+                  )
+                }
+              >
+                Privacy & Data
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-5 auto-rows-fr">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-5 items-start">
           {activeModule === "forge" && (
             <>
               <ProjectPanel
@@ -170,7 +269,21 @@ function Workspace({
               <SessionPanel
                 theme={theme}
                 refreshKey={sessionRefreshKey}
-                onWorkstationStatusRefresh={onWorkstationStatusRefresh}
+                onWorkstationStatusRefresh={async () => {
+                  await loadCurrentProject();
+                  await onWorkstationStatusRefresh();
+                }}
+              />
+
+              <CurrentProjectCard
+                project={recentProject}
+                activeSession={activeSession}
+                sessionCount={projectSessionCount}
+                theme={theme}
+              />
+              <CurrentSessionCard
+                activeSession={activeSession}
+                theme={theme}
               />
             </>
           )}
@@ -178,7 +291,7 @@ function Workspace({
           {workspaceCards.map(([title, body]) => (
             <div
               key={title}
-              className={`flex flex-col rounded-2xl border p-5 sm:p-6 shadow-lg transition-all duration-200 min-h-[160px] ${
+              className={`flex flex-col rounded-2xl border p-5 sm:p-6 shadow-lg transition-all duration-200 min-h-[160px] max-h-none ${
                 theme === "dark"
                   ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700 hover:bg-zinc-900 hover:-translate-y-0.5"
                   : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400 hover:bg-zinc-50 hover:-translate-y-0.5"
@@ -186,19 +299,15 @@ function Workspace({
             >
               <h2
                 className={`text-base sm:text-lg font-semibold tracking-tight mb-3 ${
-                  theme === "dark"
-                    ? "text-zinc-100"
-                    : "text-zinc-900"
+                  theme === "dark" ? "text-zinc-100" : "text-zinc-900"
                 }`}
               >
                 {title}
               </h2>
 
               <p
-                className={`text-sm sm:text-[15px] leading-relaxed flex-1 ${
-                  theme === "dark"
-                    ? "text-zinc-400"
-                    : "text-zinc-700"
+                className={`text-sm sm:text-[15px] leading-relaxed flex-1 whitespace-pre-line ${
+                  theme === "dark" ? "text-zinc-400" : "text-zinc-700"
                 }`}
               >
                 {body}

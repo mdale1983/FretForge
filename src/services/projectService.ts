@@ -6,17 +6,20 @@ import {
   setActiveSession,
 } from "./SessionService";
 
-export async function createProject(name: string): Promise<Project | null> {
+export async function createProject(
+  name: string,
+  notes = ""
+): Promise<Project | null> {
   const db = await getDatabase();
 
   const now = new Date().toISOString();
 
   await db.execute(
     `
-    INSERT INTO projects (name, created_at, updated_at)
-    VALUES (?, ?, ?)
+    INSERT INTO projects (name, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
     `,
-    [name, now, now]
+    [name, notes, now, now]
   );
 
   const projects = await db.select<Project[]>(
@@ -36,15 +39,27 @@ export async function createProject(name: string): Promise<Project | null> {
 export async function getProjects(): Promise<Project[]> {
   const db = await getDatabase();
 
-  const projects = await db.select<Project[]>(
+  return await db.select<Project[]>(
     `
     SELECT *
     FROM projects
+    WHERE completed_at IS NULL
     ORDER BY updated_at DESC
-  `
+    `
   );
+}
 
-  return projects;
+export async function getCompletedProjects(): Promise<Project[]> {
+  const db = await getDatabase();
+
+  return await db.select<Project[]>(
+    `
+    SELECT *
+    FROM projects
+    WHERE completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    `
+  );
 }
 
 export async function getMostRecentProject(): Promise<Project | null> {
@@ -54,6 +69,7 @@ export async function getMostRecentProject(): Promise<Project | null> {
     `
     SELECT *
     FROM projects
+    WHERE completed_at IS NULL
     ORDER BY updated_at DESC
     LIMIT 1
     `
@@ -72,6 +88,7 @@ export async function setActiveProject(projectId: number) {
     UPDATE projects
     SET updated_at = ?
     WHERE id = ?
+      AND completed_at IS NULL
     `,
     [now, projectId]
   );
@@ -120,12 +137,83 @@ export async function projectNameExists(name: string): Promise<boolean> {
     SELECT *
     FROM projects
     WHERE LOWER(name) = LOWER(?)
+      AND completed_at IS NULL
     LIMIT 1
     `,
     [name]
   );
 
   return projects.length > 0;
+}
+
+export async function updateProjectNotes(projectId: number, notes: string) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE projects
+    SET
+      notes = ?,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [notes, now, projectId]
+  );
+}
+
+export async function completeProject(projectId: number) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE projects
+    SET
+      completed_at = ?,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [now, now, projectId]
+  );
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET
+      completed_at = ?,
+      updated_at = ?
+    WHERE project_id = ?
+      AND completed_at IS NULL
+    `,
+    [now, now, projectId]
+  );
+
+  const activeProjectId = await getActiveProjectId();
+
+  if (activeProjectId === projectId) {
+    await setAppState("active_project_id", "");
+    await setAppState("active_session_id", "");
+  }
+}
+
+export async function reopenProject(projectId: number) {
+  const db = await getDatabase();
+
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE projects
+    SET
+      completed_at = NULL,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [now, projectId]
+  );
 }
 
 export async function deleteProject(projectId: number) {
@@ -148,10 +236,7 @@ export async function deleteProject(projectId: number) {
   );
 }
 
-export async function renameProject(
-  projectId: number,
-  newName: string
-) {
+export async function renameProject(projectId: number, newName: string) {
   const db = await getDatabase();
 
   const now = new Date().toISOString();
@@ -167,4 +252,3 @@ export async function renameProject(
     [newName, now, projectId]
   );
 }
-

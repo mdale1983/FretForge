@@ -6,6 +6,8 @@ export interface Session {
   id: number;
   project_id: number;
   name: string;
+  notes?: string | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
   active_workspace: string;
@@ -13,27 +15,26 @@ export interface Session {
 
 export async function createSession(projectId: number) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(
     `
     INSERT INTO sessions (
-    project_id,
-    name,
-    created_at,
-    updated_at,
-    active_workspace
-  )
-  VALUES (?, ?, ?, ?, ?)
+      project_id,
+      name,
+      created_at,
+      updated_at,
+      active_workspace
+    )
+    VALUES (?, ?, ?, ?, ?)
     `,
-   [
-    projectId,
-    `Practice Session ${new Date().toLocaleDateString()}`,
-    now,
-    now,
-    "forge",
-   ]
+    [
+      projectId,
+      `Practice Session ${new Date().toLocaleDateString()}`,
+      now,
+      now,
+      "forge",
+    ]
   );
 
   return await getMostRecentSessionForProject(projectId);
@@ -47,6 +48,7 @@ export async function getMostRecentSessionForProject(projectId: number) {
     SELECT *
     FROM sessions
     WHERE project_id = ?
+      AND completed_at IS NULL
     ORDER BY updated_at DESC
     LIMIT 1
     `,
@@ -73,7 +75,6 @@ export async function setActiveSession(sessionId: number) {
 
 export async function touchSession(sessionId: number) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(
@@ -81,6 +82,7 @@ export async function touchSession(sessionId: number) {
     UPDATE sessions
     SET updated_at = ?
     WHERE id = ?
+      AND completed_at IS NULL
     `,
     [now, sessionId]
   );
@@ -94,24 +96,37 @@ export async function getActiveSessionId(): Promise<number | null> {
   }
 
   const sessionId = Number(value);
-
   return Number.isFinite(sessionId) ? sessionId : null;
 }
 
 export async function getSessionsForProject(projectId: number) {
   const db = await getDatabase();
 
-  const sessions = await db.select<Session[]>(
+  return await db.select<Session[]>(
     `
     SELECT *
     FROM sessions
     WHERE project_id = ?
+      AND completed_at IS NULL
     ORDER BY updated_at DESC
     `,
     [projectId]
   );
+}
 
-  return sessions;
+export async function getCompletedSessionsForProject(projectId: number) {
+  const db = await getDatabase();
+
+  return await db.select<Session[]>(
+    `
+    SELECT *
+    FROM sessions
+    WHERE project_id = ?
+      AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    `,
+    [projectId]
+  );
 }
 
 export async function getSessionById(sessionId: number) {
@@ -135,15 +150,16 @@ export async function setSessionWorkspace(
   workspace: string
 ) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(
     `
     UPDATE sessions
-    SET active_workspace = ?,
-        updated_at = ?
+    SET
+      active_workspace = ?,
+      updated_at = ?
     WHERE id = ?
+      AND completed_at IS NULL
     `,
     [workspace, now, sessionId]
   );
@@ -172,6 +188,44 @@ export async function loadWorkspaceState(): Promise<SessionWorkspaceState | null
 
 export async function clearWorkspaceState() {
   localStorage.removeItem("fretforge_workspace_state");
+}
+
+export async function completeSession(sessionId: number) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const activeSessionId = await getActiveSessionId();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET
+      completed_at = ?,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [now, now, sessionId]
+  );
+
+  if (activeSessionId === sessionId) {
+    await setAppState("active_session_id", "");
+    await clearWorkspaceState();
+  }
+}
+
+export async function reopenSession(sessionId: number) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET
+      completed_at = NULL,
+      updated_at = ?
+    WHERE id = ?
+    `,
+    [now, sessionId]
+  );
 }
 
 export async function deleteSession(sessionId: number) {
@@ -210,7 +264,8 @@ export async function deleteInactiveSessionsForProject(projectId: number) {
     `
     DELETE FROM sessions
     WHERE project_id = ?
-    AND id != ?
+      AND id != ?
+      AND completed_at IS NULL
     `,
     [projectId, activeSessionId]
   );
@@ -226,6 +281,7 @@ export async function getSessionCountForProject(
     SELECT COUNT(*) as count
     FROM sessions
     WHERE project_id = ?
+      AND completed_at IS NULL
     `,
     [projectId]
   );
@@ -235,7 +291,6 @@ export async function getSessionCountForProject(
 
 export async function createRecoverySession(projectId: number) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(
@@ -244,24 +299,24 @@ export async function createRecoverySession(projectId: number) {
       project_id,
       name,
       created_at,
-      updated_at
+      updated_at,
+      active_workspace
     )
-    VALUES (?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?)
     `,
     [
       projectId,
       `Recovery Session ${new Date().toLocaleString()}`,
       now,
       now,
+      "forge",
     ]
   );
 
   return await getMostRecentSessionForProject(projectId);
 }
 
-export async function createFallbackSessionIfNeeded(
-  projectId: number
-) {
+export async function createFallbackSessionIfNeeded(projectId: number) {
   const sessionCount = await getSessionCountForProject(projectId);
 
   if (sessionCount > 0) {
@@ -282,7 +337,8 @@ export async function getNextAvailableSessionForProject(
     SELECT *
     FROM sessions
     WHERE project_id = ?
-    AND id != ?
+      AND id != ?
+      AND completed_at IS NULL
     ORDER BY updated_at DESC
     LIMIT 1
     `,
@@ -292,12 +348,8 @@ export async function getNextAvailableSessionForProject(
   return sessions[0] ?? null;
 }
 
-export async function renameSession(
-  sessionId: number,
-  newName: string
-) {
+export async function renameSession(sessionId: number, newName: string) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(
@@ -312,12 +364,8 @@ export async function renameSession(
   );
 }
 
-export async function updateSessionNotes(
-  sessionId: number,
-  notes: string
-) {
+export async function updateSessionNotes(sessionId: number, notes: string) {
   const db = await getDatabase();
-
   const now = new Date().toISOString();
 
   await db.execute(

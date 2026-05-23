@@ -305,7 +305,7 @@ function App() {
 
   return (
     <div
-      className={`h-screen w-screen overflow-hidden ${
+      className={`flex h-screen w-screen flex-col overflow-hidden ${
         theme === "dark"
           ? "bg-zinc-950 text-zinc-100"
           : "bg-zinc-100 text-zinc-900"
@@ -318,7 +318,7 @@ function App() {
         workstationStatus={workstationStatus}
       />
 
-      <div className="flex h-[calc(100vh-3rem)]">
+      <div className="flex flex-1 min-h-0">
         <LeftRail
           activeModule={activeModule}
           setActiveModule={setActiveModule}
