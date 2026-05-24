@@ -5,6 +5,11 @@ type TransportStatus =
   | "idle"
   | "ready"
   | "playing";
+type ForgePulseMode =
+  | "learn"
+  | "practice"
+  | "follow"
+  | "master";
 
 type ForgePulseWorkspaceProps = {
   theme: string;
@@ -35,14 +40,20 @@ function SettingsCard({ theme, title, children }: SettingsCardProps) {
 }
 
 function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
+    const [mode, setMode] =
+        useState<ForgePulseMode>("learn");
+
     const [bpm, setBpm] = useState<number>(120);
     const [subdivision, setSubdivision] =
         useState<Subdivision>("quarter");
+    const [beatsPerMeasure, setBeatsPerMeasure] = useState(4);
+
     const [countInEnabled, setCountInEnabled] = useState(false);
     const [timerEnabled, setTimerEnabled] = useState(false);
+    const [accentEnabled, setAccentEnabled] = useState(true);
+
     const [transportStatus, setTransportStatus] =
         useState<TransportStatus>("idle");
-    const [accentEnabled, setAccentEnabled] = useState(true);
     const [currentBeat] = useState(1);
 
   return (
@@ -67,111 +78,157 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       </p>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <SettingsCard theme={theme} title="Current BPM">
-          <input
-            className={`mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none ${
-              theme === "dark"
-                ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                : "border-zinc-300 bg-white text-zinc-900"
-            }`}
-            type="number"
-            min={40}
-            max={240}
-            value={bpm}
-            onChange={(event) => setBpm(Number(event.target.value))}
-          />
-        </SettingsCard>
+        <SettingsCard theme={theme} title="Quick Setup">
+            <div className="grid gap-3 sm:grid-cols-2">
 
-        <SettingsCard theme={theme} title="Subdivision">
-          <select
-            className={`mt-3 w-full rounded-lg border px-3 py-2 text-sm ${
-              theme === "dark"
-                ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                : "border-zinc-300 bg-white text-zinc-900"
-            }`}
-            value={subdivision}
-            onChange={(event) =>
-              setSubdivision(event.target.value as Subdivision)
-            }
-          >
-            <option value="quarter">Quarter Notes</option>
-            <option value="eighth">Eighth Notes</option>
-            <option value="triplet">Triplets</option>
-            <option value="sixteenth">Sixteenth Notes</option>
-          </select>
-        </SettingsCard>
+                <div>
+                <label className="text-xs uppercase tracking-wide text-zinc-500">
+                    Mode
+                </label>
 
-        <SettingsCard theme={theme} title="Count-In">
-          <div className="mt-1 flex items-center justify-between gap-4">
-            <p
-              className={`text-sm ${
-                theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-              }`}
-            >
-              Play a count-in before metronome start.
-            </p>
-
-            <input
-              type="checkbox"
-              checked={countInEnabled}
-              onChange={(event) =>
-                setCountInEnabled(event.target.checked)
-              }
-              className="h-4 w-4"
-            />
-          </div>
-        </SettingsCard>
-
-        <SettingsCard theme={theme} title="Practice Timer">
-          <div className="mt-1 flex items-center justify-between gap-4">
-            <p
-              className={`text-sm ${
-                theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-              }`}
-            >
-              Enable timed practice sessions.
-            </p>
-
-            <input
-              type="checkbox"
-              checked={timerEnabled}
-              onChange={(event) =>
-                setTimerEnabled(event.target.checked)
-              }
-              className="h-4 w-4"
-            />
-          </div>
-        </SettingsCard>
-        <SettingsCard theme={theme} title="Accent Beat">
-            <div className="mt-1 flex items-center justify-between gap-4">
-                <p
-                className={`text-sm ${
-                    theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-                }`}
+                <select
+                    className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm ${
+                    theme === "dark"
+                        ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                        : "border-zinc-300 bg-white text-zinc-900"
+                    }`}
+                    value={mode}
+                    onChange={(event) =>
+                    setMode(event.target.value as ForgePulseMode)
+                    }
                 >
-                Emphasize the first beat of each measure.
-                </p>
+                    <option value="learn">Learn</option>
+                    <option value="practice">Practice</option>
+                    <option value="follow">Follow</option>
+                    <option value="master">Master</option>
+                </select>
+                </div>
+                <div>
+                    <label className="text-xs uppercase tracking-wide text-zinc-500">
+                        BPM
+                    </label>
 
-                <input
-                type="checkbox"
-                checked={accentEnabled}
-                onChange={(event) =>
-                    setAccentEnabled(event.target.checked)
-                }
-                className="h-4 w-4"
-                />
+                    <input
+                        className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none ${
+                        theme === "dark"
+                            ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                            : "border-zinc-300 bg-white text-zinc-900"
+                        }`}
+                        type="number"
+                        min={40}
+                        max={240}
+                        value={bpm}
+                        onChange={(event) => setBpm(Number(event.target.value))}
+                    />
+                </div>
+                <div>
+                    <label className="text-xs uppercase tracking-wide text-zinc-500">
+                        Subdivision
+                    </label>
+
+                    <select
+                        className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm ${
+                        theme === "dark"
+                            ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                            : "border-zinc-300 bg-white text-zinc-900"
+                        }`}
+                        value={subdivision}
+                        onChange={(event) =>
+                        setSubdivision(event.target.value as Subdivision)
+                        }
+                    >
+                        <option value="quarter">Quarter Notes</option>
+                        <option value="eighth">Eighth Notes</option>
+                        <option value="triplet">Triplets</option>
+                        <option value="sixteenth">Sixteenth Notes</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs uppercase tracking-wide text-zinc-500">
+                        Time Signature
+                    </label>
+
+                    <select
+                        className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm ${
+                        theme === "dark"
+                            ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                            : "border-zinc-300 bg-white text-zinc-900"
+                        }`}
+                        value={beatsPerMeasure}
+                        onChange={(event) =>
+                        setBeatsPerMeasure(Number(event.target.value))
+                        }
+                    >
+                        <option value={2}>2/4</option>
+                        <option value={3}>3/4</option>
+                        <option value={4}>4/4</option>
+                        <option value={5}>5/4</option>
+                        <option value={6}>6/8</option>
+                        <option value={7}>7/8</option>
+                    </select>
+                </div>
+
             </div>
         </SettingsCard>
+
+        <SettingsCard theme={theme} title="Options">
+            <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={countInEnabled}
+                        onChange={(event) =>
+                        setCountInEnabled(event.target.checked)
+                        }
+                        className="h-4 w-4"
+                    />
+
+                    Count-In
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={timerEnabled}
+                        onChange={(event) =>
+                        setTimerEnabled(event.target.checked)
+                        }
+                        className="h-4 w-4"
+                    />
+
+                    Practice Timer
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={accentEnabled}
+                        onChange={(event) =>
+                        setAccentEnabled(event.target.checked)
+                        }
+                        className="h-4 w-4"
+                    />
+
+                    Accent Beat
+                </label>
+
+            </div>
+        </SettingsCard>
+        
         <div className="lg:col-span-2">
             <SettingsCard theme={theme} title="Transport">
                 <div className="mt-3">
-                    <p
-                    className={`text-sm ${
-                        theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-                    }`}
-                    >
-                    Status: {transportStatus}
-                    </p>
+                    <div className="flex items-center gap-2">
+                        <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            transportStatus === "playing"
+                                ? "bg-green-500 text-white"
+                                : theme === "dark"
+                                ? "bg-zinc-800 text-zinc-300"
+                                : "bg-zinc-200 text-zinc-700"
+                            }`}
+                        >
+                            {transportStatus.toUpperCase()}
+                        </span>
+                        </div>
                     <p
                         className={`mt-1 text-sm ${
                             theme === "dark" ? "text-zinc-500" : "text-zinc-500"
@@ -196,7 +253,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                             Accent Beat: {accentEnabled ? "Enabled" : "Disabled"}
                         </p>
                         <div className="mt-3 flex items-center gap-2">
-                            {[1, 2, 3, 4].map((beat) => (
+                            {Array.from({ length: beatsPerMeasure }, (_, index) => index + 1).map((beat) => (
                                 <div
                                 key={beat}
                                 className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
