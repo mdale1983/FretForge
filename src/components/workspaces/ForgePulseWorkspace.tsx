@@ -1,6 +1,12 @@
 import { type ReactNode, useState } from "react";
 
-type Subdivision = "quarter" | "eighth" | "triplet" | "sixteenth";
+type Subdivision =
+  | "whole"
+  | "half"
+  | "quarter"
+  | "eighth"
+  | "triplet"
+  | "sixteenth";
 type TransportStatus =
   | "idle"
   | "ready"
@@ -10,6 +16,15 @@ type ForgePulseMode =
   | "practice"
   | "follow"
   | "master";
+
+const subdivisionLabels: Record<Subdivision, string> = {
+  whole: "WHOLE NOTES",
+  half: "HALF NOTES",
+  quarter: "QUARTER NOTES",
+  eighth: "EIGHTH NOTES",
+  triplet: "TRIPLETS",
+  sixteenth: "SIXTEENTH NOTES",
+};
 
 type ForgePulseWorkspaceProps = {
   theme: string;
@@ -54,7 +69,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
 
     const [transportStatus, setTransportStatus] =
         useState<TransportStatus>("idle");
-    const [currentBeat] = useState(1);
+    
 
   return (
     <section
@@ -234,41 +249,10 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                             theme === "dark" ? "text-zinc-500" : "text-zinc-500"
                         }`}
                         >
-                        BPM: {bpm} • {subdivision}
+                        {bpm} BPM • {subdivisionLabels[subdivision]} • {beatsPerMeasure}/4
                     </p>
-                    <p
-                        className={`mt-1 text-sm ${
-                            theme === "dark" ? "text-zinc-500" : "text-zinc-500"
-                        }`}
-                        >
-                        Count-In: {countInEnabled ? "Enabled" : "Disabled"} • Timer:{" "}
-                        {timerEnabled ? "Enabled" : "Disabled"}
-                    </p>
-                    <>
-                        <p
-                            className={`mt-1 text-sm ${
-                                theme === "dark" ? "text-zinc-500" : "text-zinc-500"
-                            }`}
-                        >
-                            Accent Beat: {accentEnabled ? "Enabled" : "Disabled"}
-                        </p>
-                        <div className="mt-3 flex items-center gap-2">
-                            {Array.from({ length: beatsPerMeasure }, (_, index) => index + 1).map((beat) => (
-                                <div
-                                key={beat}
-                                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
-                                    beat === currentBeat
-                                    ? "bg-orange-500 text-white"
-                                    : theme === "dark"
-                                        ? "bg-zinc-800 text-zinc-500"
-                                        : "bg-zinc-200 text-zinc-600"
-                                }`}
-                                >
-                                {beat}
-                                </div>
-                            ))}
-                        </div>
-                    </>
+                    
+                    
                     <p
                         className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
                             theme === "dark"
@@ -299,25 +283,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                             Stop Metronome
                         </button>
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
-                        <div
-                            className={`h-3 w-3 rounded-full ${
-                            transportStatus === "playing"
-                                ? "bg-green-500"
-                                : "bg-zinc-500"
-                            }`}
-                        />
-
-                        <span
-                            className={`text-sm ${
-                            theme === "dark" ? "text-zinc-400" : "text-zinc-600"
-                            }`}
-                        >
-                            {transportStatus === "playing"
-                            ? "Metronome armed"
-                            : "Metronome stopped"}
-                        </span>
-                    </div>
+                   
                 </div>
             </SettingsCard>
         </div>
