@@ -195,14 +195,22 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                         >
                             Accent Beat: {accentEnabled ? "Enabled" : "Disabled"}
                         </p>
-
-                        <p
-                            className={`mt-1 text-sm ${
-                                theme === "dark" ? "text-zinc-500" : "text-zinc-500"
-                            }`}
-                        >
-                            Current Beat: {currentBeat}
-                        </p>
+                        <div className="mt-3 flex items-center gap-2">
+                            {[1, 2, 3, 4].map((beat) => (
+                                <div
+                                key={beat}
+                                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+                                    beat === currentBeat
+                                    ? "bg-orange-500 text-white"
+                                    : theme === "dark"
+                                        ? "bg-zinc-800 text-zinc-500"
+                                        : "bg-zinc-200 text-zinc-600"
+                                }`}
+                                >
+                                {beat}
+                                </div>
+                            ))}
+                        </div>
                     </>
                     <p
                         className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
