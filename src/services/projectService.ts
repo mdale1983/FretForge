@@ -6,6 +6,7 @@ import {
   setActiveSession,
 } from "./SessionService";
 
+// Project creation
 export async function createProject(
   name: string,
   notes = ""
@@ -36,6 +37,7 @@ export async function createProject(
   return projects[0] ?? null;
 }
 
+// Active and completed project queries
 export async function getProjects(): Promise<Project[]> {
   const db = await getDatabase();
 
@@ -78,6 +80,7 @@ export async function getMostRecentProject(): Promise<Project | null> {
   return projects[0] ?? null;
 }
 
+// Active project coordination
 export async function setActiveProject(projectId: number) {
   const db = await getDatabase();
 
@@ -129,6 +132,7 @@ export async function getProjectById(projectId: number): Promise<Project | null>
   return projects.length > 0 ? projects[0] : null;
 }
 
+// Project validation and editable content
 export async function projectNameExists(name: string): Promise<boolean> {
   const db = await getDatabase();
 
@@ -163,6 +167,7 @@ export async function updateProjectNotes(projectId: number, notes: string) {
   );
 }
 
+// Project lifecycle
 export async function completeProject(projectId: number) {
   const db = await getDatabase();
 

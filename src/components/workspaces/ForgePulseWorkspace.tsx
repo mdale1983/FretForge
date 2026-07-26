@@ -22,26 +22,25 @@ type ForgePulseWorkspaceProps = {
   theme: string;
 };
 
-
 function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
-    const [mode, setMode] =
-        useState<ForgePulseMode>("learn");
-    const [view, setView] =
-        useState<ForgePulseView>("setup");
+  // Setup and session navigation
+  const [mode, setMode] = useState<ForgePulseMode>("learn");
+  const [view, setView] = useState<ForgePulseView>("setup");
 
-    const [bpm, setBpm] = useState<number>(120);
-    const [subdivision, setSubdivision] =
-        useState<Subdivision>("quarter");
-    const [timeSignature, setTimeSignature] =
-      useState<TimeSignature>("4/4");
+  // Session timing configuration
+  const [bpm, setBpm] = useState<number>(120);
+  const [subdivision, setSubdivision] =
+    useState<Subdivision>("quarter");
+  const [timeSignature, setTimeSignature] =
+    useState<TimeSignature>("4/4");
 
-    const [countInEnabled, setCountInEnabled] = useState(false);
-    const [timerEnabled, setTimerEnabled] = useState(false);
-    const [accentEnabled, setAccentEnabled] = useState(true);
+  // Optional session behavior
+  const [countInEnabled, setCountInEnabled] = useState(false);
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [accentEnabled, setAccentEnabled] = useState(true);
 
-    const [, setTransportStatus] =
-      useState<TransportStatus>("idle");
-    
+  // Transport state is retained here until audio generation is connected
+  const [, setTransportStatus] = useState<TransportStatus>("idle");
 
   return (
     <section
@@ -64,41 +63,43 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         persistence are intentionally not wired yet.
       </p>
 
-        {view === "session" && (
-            <ForgePulseSessionView
-                theme={theme}
-                sessionTitle={modeSessionTitles[mode]}
-                onBack={() => setView("setup")}
-                onStart={() => setTransportStatus("playing")}
-                onStop={() => setTransportStatus("idle")}
-            />
-        )}
+      {/* Active practice session */}
+      {view === "session" && (
+        <ForgePulseSessionView
+          theme={theme}
+          sessionTitle={modeSessionTitles[mode]}
+          onBack={() => setView("setup")}
+          onStart={() => setTransportStatus("playing")}
+          onStop={() => setTransportStatus("idle")}
+        />
+      )}
 
-        {view === "setup" && (
-          <ForgePulseSetupView
-            theme={theme}
-            mode={mode}
-            bpm={bpm}
-            subdivision={subdivision}
-            timeSignature={timeSignature}
-            modeTitle={modeTitles[mode]}
-            modeDifficulty={modeDifficulty[mode]}
-            modeObjective={modeObjectives[mode]}
-            modeDescription={modeDescriptions[mode]}
-            sessionTitle={modeSessionTitles[mode]}
-            countInEnabled={countInEnabled}
-            timerEnabled={timerEnabled}
-            accentEnabled={accentEnabled}
-            onModeChange={setMode}
-            onBpmChange={setBpm}
-            onSubdivisionChange={setSubdivision}
-            onTimeSignatureChange={setTimeSignature}
-            onCountInChange={setCountInEnabled}
-            onTimerChange={setTimerEnabled}
-            onAccentChange={setAccentEnabled}
-            onStartSession={() => setView("session")}
-          />
-        )}
+      {/* Session configuration */}
+      {view === "setup" && (
+        <ForgePulseSetupView
+          theme={theme}
+          mode={mode}
+          bpm={bpm}
+          subdivision={subdivision}
+          timeSignature={timeSignature}
+          modeTitle={modeTitles[mode]}
+          modeDifficulty={modeDifficulty[mode]}
+          modeObjective={modeObjectives[mode]}
+          modeDescription={modeDescriptions[mode]}
+          sessionTitle={modeSessionTitles[mode]}
+          countInEnabled={countInEnabled}
+          timerEnabled={timerEnabled}
+          accentEnabled={accentEnabled}
+          onModeChange={setMode}
+          onBpmChange={setBpm}
+          onSubdivisionChange={setSubdivision}
+          onTimeSignatureChange={setTimeSignature}
+          onCountInChange={setCountInEnabled}
+          onTimerChange={setTimerEnabled}
+          onAccentChange={setAccentEnabled}
+          onStartSession={() => setView("session")}
+        />
+      )}
     </section>
   );
 }

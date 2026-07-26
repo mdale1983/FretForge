@@ -21,6 +21,7 @@ export function ForgePulseSessionView({
           : "border-zinc-200 bg-zinc-50"
       }`}
     >
+      {/* Active session summary */}
       <p className="text-xs uppercase tracking-wide text-zinc-500">
         Active Session
       </p>
@@ -29,6 +30,7 @@ export function ForgePulseSessionView({
         {sessionTitle}
       </h3>
 
+      {/* Session navigation */}
       <button
         type="button"
         onClick={onBack}
@@ -41,6 +43,7 @@ export function ForgePulseSessionView({
         Back to Setup
       </button>
 
+      {/* Transport controls */}
       <div className="mt-4 flex items-center justify-between">
         <button
           type="button"

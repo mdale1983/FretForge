@@ -7,6 +7,7 @@ import {
 } from "../services/workstationTelemetryService";
 
 export function useWorkstationTelemetry() {
+  // Current telemetry snapshot and audio-device preference
   const [workstationStatus, setWorkstationStatus] = useState(
     defaultWorkstationStatus
   );
@@ -47,6 +48,7 @@ export function useWorkstationTelemetry() {
     }
   }
 
+  // Refresh hardware telemetry while the application is open
   useEffect(() => {
     refreshSystemTelemetry();
 
@@ -59,6 +61,7 @@ export function useWorkstationTelemetry() {
     };
   }, [selectedAudioDevice]);
 
+  // Keep the selected output device across launches
   useEffect(() => {
     localStorage.setItem(
       "fretforge.selectedAudioDevice",

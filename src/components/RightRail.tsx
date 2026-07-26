@@ -30,6 +30,7 @@ function RightRail({
   recoveryState,
   logState,
 }: RightRailProps) {
+  // Current module context and theme-aware text styles
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
 
@@ -43,6 +44,7 @@ function RightRail({
       ? "text-zinc-200"
       : "text-zinc-900";
 
+  // Collapsible workspace context rail
   return (
     <aside
       className={`${
@@ -157,9 +159,11 @@ function RightRail({
 
             <div>
               <p className={`text-xs uppercase tracking-wide ${labelClass}`}>
-                Recovery
+                Storage
               </p>
-              <p className={valueClass}>Ready</p>
+              <p className={valueClass}>
+                {storageState ?? "Unknown"}
+              </p>
             </div>
 
             <div>

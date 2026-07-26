@@ -25,6 +25,7 @@ type WorkspaceProps = {
   onWorkstationStatusRefresh: () => Promise<void>;
 };
 
+// Placeholder cards for workspaces that do not yet have dedicated views
 function getWorkspaceCards(activeModule: string) {
   switch (activeModule) {
     case "rhythm":
@@ -87,8 +88,7 @@ function getWorkspaceCards(activeModule: string) {
       ];
 
     default:
-      return [
-      ];
+      return [];
   }
 }
 
@@ -97,6 +97,7 @@ function Workspace({
   theme,
   onWorkstationStatusRefresh,
 }: WorkspaceProps) {
+  // Active project and session summary state
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [recentProject, setRecentProject] = useState<Project | null>(null);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -142,6 +143,7 @@ function Workspace({
     setProjectSessionCount(0);
   }
 
+  // Load the most relevant project when the workspace first mounts
   useEffect(() => {
     loadCurrentProject();
   }, []);
@@ -151,6 +153,7 @@ function Workspace({
 
   const workspaceCards = getWorkspaceCards(activeModule);
 
+  // Active workspace layout
   return (
     <main
       className={`flex-1 overflow-auto px-4 pt-0 pb-32 sm:px-6 lg:px-8 ${

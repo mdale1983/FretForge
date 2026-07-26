@@ -7,6 +7,7 @@ import {
 
 export type { Session };
 
+// Session creation and discovery
 export async function createSession(projectId: number) {
   const db = await getDatabase();
   const now = new Date().toISOString();
@@ -62,6 +63,7 @@ export async function getOrCreateSessionForProject(projectId: number) {
   return await createSession(projectId);
 }
 
+// Active session coordination
 export async function setActiveSession(sessionId: number) {
   await setAppState("active_session_id", String(sessionId));
   await touchSession(sessionId);
@@ -93,6 +95,7 @@ export async function getActiveSessionId(): Promise<number | null> {
   return Number.isFinite(sessionId) ? sessionId : null;
 }
 
+// Active and completed session queries
 export async function getSessionsForProject(projectId: number) {
   const db = await getDatabase();
 
@@ -139,6 +142,7 @@ export async function getSessionById(sessionId: number) {
   return sessions[0] ?? null;
 }
 
+// Workspace selection and local restoration state
 export async function setSessionWorkspace(
   sessionId: number,
   workspace: string
@@ -184,6 +188,7 @@ export async function clearWorkspaceState() {
   localStorage.removeItem("fretforge_workspace_state");
 }
 
+// Session lifecycle
 export async function completeSession(sessionId: number) {
   const db = await getDatabase();
   const now = new Date().toISOString();
@@ -265,6 +270,7 @@ export async function deleteInactiveSessionsForProject(projectId: number) {
   );
 }
 
+// Session counts and recovery safeguards
 export async function getSessionCountForProject(
   projectId: number
 ): Promise<number> {
@@ -342,6 +348,7 @@ export async function getNextAvailableSessionForProject(
   return sessions[0] ?? null;
 }
 
+// Editable session content
 export async function renameSession(sessionId: number, newName: string) {
   const db = await getDatabase();
   const now = new Date().toISOString();
@@ -374,6 +381,7 @@ export async function updateSessionNotes(sessionId: number, notes: string) {
   );
 }
 
+// Preserve an active session before deleting the current one
 export async function switchToFallbackSessionBeforeDelete(
   projectId: number,
   sessionIdToDelete: number

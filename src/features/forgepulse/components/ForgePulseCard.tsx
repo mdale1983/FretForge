@@ -4,6 +4,7 @@ type ForgePulseCardProps = {
   children: React.ReactNode;
 };
 
+// Shared visual shell for ForgePulse setup and preview sections
 export function ForgePulseCard({
   theme,
   title,

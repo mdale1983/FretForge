@@ -23,6 +23,7 @@ import {
 import { useWorkstationTelemetry } from "./hooks/useWorkstationTelemetry";
 
 function App() {
+  // Persistent UI preferences
   const [activeModule, setActiveModule] = useState(
     localStorage.getItem("fretforge.activeModule") ?? "forge"
   );
@@ -41,6 +42,7 @@ function App() {
 
   const [sessionCount, setSessionCount] = useState(0);
 
+  // Live workstation telemetry and audio-device selection
   const {
     workstationStatus,
     setWorkstationStatus,
@@ -49,6 +51,7 @@ function App() {
     setSelectedAudioDevice,
   } = useWorkstationTelemetry();
 
+  // Workspace persistence
   async function saveCurrentWorkspaceState() {
     const sessionId = await getActiveSessionId();
     const appWindow = getCurrentWindow();
@@ -101,6 +104,7 @@ function App() {
     }));
   }
 
+  // Restore the last session, workspace, and window placement on startup
   useEffect(() => {
     async function restoreWorkspace() {
       const workspaceState = await loadWorkspaceState();
@@ -202,8 +206,9 @@ function App() {
     }
 
     persistWorkspace();
-  }, [activeModule, leftPinned]);
+  }, [activeModule, leftPinned, rightPinned]);
 
+  // Persist window changes after a short debounce
   useEffect(() => {
     let timeoutId: number | null = null;
 
@@ -228,7 +233,7 @@ function App() {
       window.removeEventListener("resize", handleWindowChange);
       window.removeEventListener("move", handleWindowChange);
     };
-  }, [activeModule, leftPinned]);
+  }, [activeModule, leftPinned, rightPinned]);
 
   useEffect(() => {
     localStorage.setItem("fretforge.theme", theme);
@@ -242,6 +247,7 @@ function App() {
     localStorage.setItem("fretforge.rightPinned", String(rightPinned));
   }, [rightPinned]);
 
+  // Application shell
   return (
     <div
       className={`flex h-screen w-screen flex-col overflow-hidden ${

@@ -1,5 +1,6 @@
 import { getDatabase } from "../lib/database";
 
+// Small persistent key-value store for application-wide state
 export async function setAppState(key: string, value: string) {
   const db = await getDatabase();
   const now = new Date().toISOString();

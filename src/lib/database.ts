@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 
+// Shared database connection
 let db: Database | null = null;
 
 export async function getDatabase() {
@@ -13,7 +14,7 @@ export async function getDatabase() {
 export async function initializeDatabase() {
   const database = await getDatabase();
 
-  // Projects table
+  // Projects schema and additive migrations
   await database.execute(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +44,7 @@ export async function initializeDatabase() {
     // Column already exists
   }
 
+  // Application state schema
   await database.execute(`
     CREATE TABLE IF NOT EXISTS app_state (
       key TEXT PRIMARY KEY,
@@ -51,7 +53,7 @@ export async function initializeDatabase() {
     )
   `);
 
-  // Sessions table
+  // Sessions schema and additive migrations
   await database.execute(`
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
