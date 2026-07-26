@@ -71,4 +71,20 @@ export async function initializeDatabase() {
   );
   await addColumnIfMissing(database, "sessions", "notes", "TEXT");
   await addColumnIfMissing(database, "sessions", "completed_at", "TEXT");
+
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS forgepulse_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER,
+      session_id INTEGER,
+      mode TEXT NOT NULL,
+      bpm INTEGER NOT NULL,
+      subdivision TEXT NOT NULL,
+      time_signature TEXT NOT NULL,
+      duration_seconds INTEGER NOT NULL,
+      completed_at TEXT NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id),
+      FOREIGN KEY(session_id) REFERENCES sessions(id)
+    );
+  `);
 }

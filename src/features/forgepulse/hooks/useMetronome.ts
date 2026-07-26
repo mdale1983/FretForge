@@ -37,10 +37,13 @@ export function useMetronome({
   const [currentBeat, setCurrentBeat] = useState(0);
   const [currentSubdivision, setCurrentSubdivision] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [automaticCompletionCount, setAutomaticCompletionCount] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const clickTimeoutRef = useRef<number | null>(null);
   const clockIntervalRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
+  const elapsedSecondsRef = useRef(0);
+  const runningRef = useRef(false);
   const stepRef = useRef(0);
 
   const beatsPerMeasure = Number(timeSignature.split("/")[0]);
@@ -72,6 +75,10 @@ export function useMetronome({
   }, []);
 
   const stop = useCallback(() => {
+    const finalElapsedSeconds = runningRef.current
+      ? Math.floor((Date.now() - startedAtRef.current) / 1_000)
+      : 0;
+
     if (clickTimeoutRef.current !== null) {
       window.clearTimeout(clickTimeoutRef.current);
       clickTimeoutRef.current = null;
@@ -83,14 +90,19 @@ export function useMetronome({
     }
 
     stepRef.current = 0;
+    runningRef.current = false;
+    elapsedSecondsRef.current = finalElapsedSeconds;
+    setElapsedSeconds(finalElapsedSeconds);
     setStatus("idle");
     setCurrentBeat(0);
     setCurrentSubdivision(0);
+    return finalElapsedSeconds;
   }, []);
 
   const start = useCallback(async () => {
     stop();
     setElapsedSeconds(0);
+    elapsedSecondsRef.current = 0;
 
     if (audioContextRef.current?.state === "suspended") {
       await audioContextRef.current.resume();
@@ -103,6 +115,7 @@ export function useMetronome({
     const beginPractice = () => {
       setStatus("playing");
       startedAtRef.current = Date.now();
+      runningRef.current = true;
 
       const tick = () => {
         const step = stepRef.current;
@@ -120,10 +133,12 @@ export function useMetronome({
       tick();
       clockIntervalRef.current = window.setInterval(() => {
         const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1_000);
+        elapsedSecondsRef.current = elapsed;
         setElapsedSeconds(elapsed);
 
         if (timerEnabled && elapsed >= durationMinutes * 60) {
           stop();
+          setAutomaticCompletionCount((count) => count + 1);
         }
       }, 250);
     };
@@ -159,13 +174,19 @@ export function useMetronome({
     timerEnabled,
   ]);
 
-  useEffect(() => stop, [stop]);
+  useEffect(
+    () => () => {
+      stop();
+    },
+    [stop]
+  );
 
   return {
     status,
     currentBeat,
     currentSubdivision,
     elapsedSeconds,
+    automaticCompletionCount,
     start,
     stop,
   };

@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ForgePulseSessionView } from "../../features/forgepulse/components/ForgePulseSessionView";
 import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgePulseSetupView";
 import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
+import {
+  getRecentForgePulseRuns,
+  saveForgePulseRun,
+  type ForgePulseRun,
+} from "../../features/forgepulse/forgePulseService";
+import { getActiveProjectId } from "../../services/projectService";
+import { getActiveSessionId } from "../../services/SessionService";
 
 import {
   type Subdivision,
@@ -39,6 +46,11 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(5);
   const [accentEnabled, setAccentEnabled] = useState(true);
+  const [recentRuns, setRecentRuns] = useState<ForgePulseRun[]>([]);
+  const [isSavingRun, setIsSavingRun] = useState(false);
+  const [runSaveError, setRunSaveError] = useState("");
+  const lastAutomaticCompletionRef = useRef(0);
+  const savingRunRef = useRef(false);
 
   const metronome = useMetronome({
     bpm,
@@ -49,6 +61,78 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     timerEnabled,
     durationMinutes,
   });
+
+  const loadRecentRuns = useCallback(async () => {
+    setRecentRuns(await getRecentForgePulseRuns());
+  }, []);
+
+  const recordRun = useCallback(
+    async (durationSeconds: number) => {
+      if (durationSeconds < 1 || savingRunRef.current) return;
+
+      savingRunRef.current = true;
+      setIsSavingRun(true);
+      setRunSaveError("");
+
+      try {
+        const [projectId, sessionId] = await Promise.all([
+          getActiveProjectId(),
+          getActiveSessionId(),
+        ]);
+
+        await saveForgePulseRun({
+          projectId,
+          sessionId,
+          mode,
+          bpm,
+          subdivision,
+          timeSignature,
+          durationSeconds,
+        });
+
+        await loadRecentRuns();
+      } catch (error) {
+        console.error("ForgePulse run could not be saved:", error);
+        setRunSaveError(
+          "This practice run could not be saved. Your metronome settings are unchanged."
+        );
+      } finally {
+        savingRunRef.current = false;
+        setIsSavingRun(false);
+      }
+    },
+    [
+      bpm,
+      loadRecentRuns,
+      mode,
+      subdivision,
+      timeSignature,
+    ]
+  );
+
+  useEffect(() => {
+    loadRecentRuns();
+  }, [loadRecentRuns]);
+
+  useEffect(() => {
+    if (
+      metronome.automaticCompletionCount >
+      lastAutomaticCompletionRef.current
+    ) {
+      lastAutomaticCompletionRef.current =
+        metronome.automaticCompletionCount;
+      recordRun(durationMinutes * 60);
+    }
+  }, [
+    durationMinutes,
+    metronome.automaticCompletionCount,
+    recordRun,
+  ]);
+
+  async function stopAndRecord() {
+    const durationSeconds = metronome.stop();
+    await recordRun(durationSeconds);
+  }
 
   return (
     <section
@@ -81,9 +165,14 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           timeSignature={timeSignature}
           timerEnabled={timerEnabled}
           durationMinutes={durationMinutes}
-          {...metronome}
+          status={metronome.status}
+          currentBeat={metronome.currentBeat}
+          currentSubdivision={metronome.currentSubdivision}
+          elapsedSeconds={metronome.elapsedSeconds}
+          start={metronome.start}
+          stop={stopAndRecord}
           onBack={() => {
-            metronome.stop();
+            stopAndRecord();
             setView("setup");
           }}
         />
@@ -117,6 +206,50 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           onStartSession={() => setView("session")}
         />
       )}
+
+      <div className="mt-5 rounded-xl border border-zinc-700/60 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">Recent Practice</h3>
+          {isSavingRun && (
+            <span className="text-xs text-zinc-500">Saving…</span>
+          )}
+        </div>
+
+        {recentRuns.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">
+            Complete a metronome run to start building your practice history.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {recentRuns.map((run) => (
+              <div
+                key={run.id}
+                className={`rounded-lg border p-3 text-sm ${
+                  theme === "dark"
+                    ? "border-zinc-800 bg-zinc-950/60"
+                    : "border-zinc-200 bg-zinc-50"
+                }`}
+              >
+                <p className="font-semibold">{run.bpm} BPM</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {Math.floor(run.duration_seconds / 60)}m {run.duration_seconds % 60}s
+                  {" · "}
+                  {run.time_signature}
+                </p>
+                <p className="mt-1 text-xs capitalize text-zinc-500">
+                  {run.mode} · {run.subdivision}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {runSaveError && (
+          <p className="mt-3 text-sm text-red-400" role="alert">
+            {runSaveError}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
