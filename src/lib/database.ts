@@ -87,4 +87,20 @@ export async function initializeDatabase() {
       FOREIGN KEY(session_id) REFERENCES sessions(id)
     );
   `);
+
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS tone_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      amp_model TEXT NOT NULL,
+      gain INTEGER NOT NULL,
+      bass INTEGER NOT NULL,
+      mids INTEGER NOT NULL,
+      treble INTEGER NOT NULL,
+      presence INTEGER NOT NULL,
+      notes TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 }

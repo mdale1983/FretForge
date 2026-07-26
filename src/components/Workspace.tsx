@@ -20,6 +20,7 @@ import SessionPanel from "./SessionPanel";
 import ForgePulseWorkspace from "./workspaces/ForgePulseWorkspace";
 import ForgeTuneWorkspace from "./workspaces/ForgeTuneWorkspace";
 import JamForgeWorkspace from "./workspaces/JamForgeWorkspace";
+import ToneLabWorkspace from "./workspaces/ToneLabWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -66,13 +67,6 @@ function getWorkspaceCards(activeModule: string) {
 
     case "pulse":
       return [];
-
-    case "tone":
-      return [
-        ["Tone Lab", "Tone management system."],
-        ["Amp Profiles", "5150 Block Letter"],
-        ["IR Library", "Celestion V30 collection"],
-      ];
 
     default:
       return [];
@@ -249,6 +243,12 @@ function Workspace({
           {activeModule === "jam" && (
             <div className="col-span-full">
               <JamForgeWorkspace theme={theme} />
+            </div>
+          )}
+
+          {activeModule === "tone" && (
+            <div className="col-span-full">
+              <ToneLabWorkspace theme={theme} />
             </div>
           )}
 
