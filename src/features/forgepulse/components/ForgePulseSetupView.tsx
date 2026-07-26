@@ -22,6 +22,7 @@ type ForgePulseSetupViewProps = {
     countInEnabled: boolean;
     timerEnabled: boolean;
     durationMinutes: number;
+    volume: number;
     accentEnabled: boolean;
 
     onModeChange: (value: ForgePulseMode) => void;
@@ -31,6 +32,7 @@ type ForgePulseSetupViewProps = {
     onCountInChange: (value: boolean) => void;
     onTimerChange: (value: boolean) => void;
     onDurationChange: (value: number) => void;
+    onVolumeChange: (value: number) => void;
     onAccentChange: (value: boolean) => void;
     onStartSession: () => void;
 };
@@ -51,6 +53,7 @@ export function ForgePulseSetupView({
     countInEnabled,
     timerEnabled,
     durationMinutes,
+    volume,
     accentEnabled,
     onModeChange,
     onBpmChange,
@@ -59,6 +62,7 @@ export function ForgePulseSetupView({
     onCountInChange,
     onTimerChange,
     onDurationChange,
+    onVolumeChange,
     onAccentChange,
     onStartSession,
 }: ForgePulseSetupViewProps) {
@@ -221,6 +225,21 @@ export function ForgePulseSetupView({
                 </select>
               </label>
             )}
+
+            <label className="mt-4 block text-xs uppercase tracking-wide text-zinc-500">
+              Click Volume · {Math.round(volume * 100)}%
+              <input
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.05}
+                value={volume}
+                onChange={(event) =>
+                  onVolumeChange(Number(event.target.value))
+                }
+                className="mt-2 block w-full accent-orange-500"
+              />
+            </label>
         </ForgePulseCard>
 
     {/* Session Preview */}

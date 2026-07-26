@@ -152,6 +152,10 @@ export function ForgePulseSessionView({
           Back to Setup
         </button>
       </div>
+
+      <p className="mt-3 text-xs text-zinc-500">
+        Press Space to start or stop while focus is outside a control.
+      </p>
     </div>
   );
 }

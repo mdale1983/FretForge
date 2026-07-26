@@ -9,6 +9,10 @@ import {
 } from "../../features/forgepulse/forgePulseService";
 import { getActiveProjectId } from "../../services/projectService";
 import { getActiveSessionId } from "../../services/SessionService";
+import {
+  loadForgePulsePreferences,
+  saveForgePulsePreferences,
+} from "../../features/forgepulse/forgePulsePreferences";
 
 import {
   type Subdivision,
@@ -30,22 +34,33 @@ type ForgePulseWorkspaceProps = {
 };
 
 function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
+  const [initialPreferences] = useState(loadForgePulsePreferences);
+
   // Setup and session navigation
-  const [mode, setMode] = useState<ForgePulseMode>("learn");
+  const [mode, setMode] = useState<ForgePulseMode>(initialPreferences.mode);
   const [view, setView] = useState<ForgePulseView>("setup");
 
   // Session timing configuration
-  const [bpm, setBpm] = useState<number>(120);
+  const [bpm, setBpm] = useState<number>(initialPreferences.bpm);
   const [subdivision, setSubdivision] =
-    useState<Subdivision>("quarter");
+    useState<Subdivision>(initialPreferences.subdivision);
   const [timeSignature, setTimeSignature] =
-    useState<TimeSignature>("4/4");
+    useState<TimeSignature>(initialPreferences.timeSignature);
 
   // Optional session behavior
-  const [countInEnabled, setCountInEnabled] = useState(false);
-  const [timerEnabled, setTimerEnabled] = useState(false);
-  const [durationMinutes, setDurationMinutes] = useState(5);
-  const [accentEnabled, setAccentEnabled] = useState(true);
+  const [countInEnabled, setCountInEnabled] = useState(
+    initialPreferences.countInEnabled
+  );
+  const [timerEnabled, setTimerEnabled] = useState(
+    initialPreferences.timerEnabled
+  );
+  const [durationMinutes, setDurationMinutes] = useState(
+    initialPreferences.durationMinutes
+  );
+  const [accentEnabled, setAccentEnabled] = useState(
+    initialPreferences.accentEnabled
+  );
+  const [volume, setVolume] = useState(initialPreferences.volume);
   const [recentRuns, setRecentRuns] = useState<ForgePulseRun[]>([]);
   const [isSavingRun, setIsSavingRun] = useState(false);
   const [runSaveError, setRunSaveError] = useState("");
@@ -60,7 +75,32 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     countInEnabled,
     timerEnabled,
     durationMinutes,
+    volume,
   });
+
+  useEffect(() => {
+    saveForgePulsePreferences({
+      mode,
+      bpm,
+      subdivision,
+      timeSignature,
+      countInEnabled,
+      timerEnabled,
+      durationMinutes,
+      accentEnabled,
+      volume,
+    });
+  }, [
+    accentEnabled,
+    bpm,
+    countInEnabled,
+    durationMinutes,
+    mode,
+    subdivision,
+    timeSignature,
+    timerEnabled,
+    volume,
+  ]);
 
   const loadRecentRuns = useCallback(async () => {
     setRecentRuns(await getRecentForgePulseRuns());
@@ -129,10 +169,37 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     recordRun,
   ]);
 
-  async function stopAndRecord() {
+  const stopAndRecord = useCallback(async () => {
     const durationSeconds = metronome.stop();
     await recordRun(durationSeconds);
-  }
+  }, [metronome.stop, recordRun]);
+
+  useEffect(() => {
+    if (view !== "session") return;
+
+    const handleKeyboardTransport = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+
+      if (
+        event.code !== "Space" ||
+        event.repeat ||
+        target?.matches("input, select, textarea, button")
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (metronome.status === "idle") {
+        metronome.start();
+      } else {
+        stopAndRecord();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyboardTransport);
+    return () => window.removeEventListener("keydown", handleKeyboardTransport);
+  }, [metronome.start, metronome.status, stopAndRecord, view]);
 
   return (
     <section
@@ -194,6 +261,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           countInEnabled={countInEnabled}
           timerEnabled={timerEnabled}
           durationMinutes={durationMinutes}
+          volume={volume}
           accentEnabled={accentEnabled}
           onModeChange={setMode}
           onBpmChange={setBpm}
@@ -202,6 +270,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           onCountInChange={setCountInEnabled}
           onTimerChange={setTimerEnabled}
           onDurationChange={setDurationMinutes}
+          onVolumeChange={setVolume}
           onAccentChange={setAccentEnabled}
           onStartSession={() => setView("session")}
         />

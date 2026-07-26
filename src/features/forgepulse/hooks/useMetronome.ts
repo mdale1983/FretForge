@@ -22,6 +22,7 @@ type UseMetronomeOptions = {
   countInEnabled: boolean;
   timerEnabled: boolean;
   durationMinutes: number;
+  volume: number;
 };
 
 export function useMetronome({
@@ -32,6 +33,7 @@ export function useMetronome({
   countInEnabled,
   timerEnabled,
   durationMinutes,
+  volume,
 }: UseMetronomeOptions) {
   const [status, setStatus] = useState<TransportStatus>("idle");
   const [currentBeat, setCurrentBeat] = useState(0);
@@ -66,13 +68,17 @@ export function useMetronome({
     const now = context.currentTime;
 
     oscillator.frequency.value = accent ? 1_320 : 880;
-    gain.gain.setValueAtTime(accent ? 0.3 : 0.18, now);
+    const clickVolume = Math.max(0.01, Math.min(volume, 1));
+    gain.gain.setValueAtTime(
+      clickVolume * (accent ? 0.42 : 0.26),
+      now
+    );
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
     oscillator.connect(gain);
     gain.connect(context.destination);
     oscillator.start(now);
     oscillator.stop(now + 0.05);
-  }, []);
+  }, [volume]);
 
   const stop = useCallback(() => {
     const finalElapsedSeconds = runningRef.current
