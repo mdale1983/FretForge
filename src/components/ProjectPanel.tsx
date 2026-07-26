@@ -12,6 +12,7 @@ import {
   updateProjectNotes,
 } from "../services/projectService";
 import { Project } from "../types/project";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 
 type ProjectPanelProps = {
   theme: string;
@@ -19,6 +20,7 @@ type ProjectPanelProps = {
 };
 
 function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
+  const projectAction = useAsyncAction();
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
@@ -33,8 +35,11 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     useState<Project | null>(null);
 
   useEffect(() => {
-    loadProjects();
-  }, []);
+    projectAction.run(
+      loadProjects,
+      "Projects could not be loaded. Please try again."
+    );
+  }, [projectAction.run]);
 
   async function loadProjects() {
     const loadedProjects = await getProjects();
@@ -50,6 +55,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
   }
 
   async function handleCreateProject(projectName: string, projectNotes: string) {
+    await projectAction.run(async () => {
     const trimmedName = projectName.trim();
 
     if (!trimmedName) return;
@@ -74,12 +80,15 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
 
     await loadProjects();
     onProjectChanged();
+    }, "The project could not be created. Please try again.");
   }
 
   async function handleSelectProject(projectId: number) {
+    await projectAction.run(async () => {
     await setActiveProject(projectId);
     await loadProjects();
     onProjectChanged();
+    }, "The active project could not be changed.");
   }
 
   function startRenamingProject(projectId: number, projectName: string) {
@@ -88,6 +97,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
   }
 
   async function saveRenamedProject(projectId: number) {
+    await projectAction.run(async () => {
     const trimmedName = editingProjectName.trim();
 
     if (!trimmedName) {
@@ -114,9 +124,11 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
 
     await loadProjects();
     onProjectChanged();
+    }, "The project could not be renamed.");
   }
 
   async function handleSaveProjectNotes(projectId: number) {
+    await projectAction.run(async () => {
     await updateProjectNotes(projectId, notesValue);
 
     setEditingNotesProjectId(null);
@@ -124,9 +136,11 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
 
     await loadProjects();
     onProjectChanged();
+    }, "The project notes could not be saved.");
   }
 
   async function handleDeleteProject() {
+    await projectAction.run(async () => {
     if (!projectPendingDelete) return;
 
     if (projectPendingDelete.id === activeProjectId) {
@@ -141,6 +155,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
 
     await loadProjects();
     onProjectChanged();
+    }, "The project could not be deleted.");
   }
 
   async function handleCompleteProject(project: Project) {
@@ -150,15 +165,18 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
 
     if (!confirmed) return;
 
+    await projectAction.run(async () => {
     await completeProject(project.id);
 
     await loadProjects();
     onProjectChanged();
+    }, "The project could not be completed.");
   }
 
   return (
     <>
       <div
+        aria-busy={projectAction.isPending}
         className={`flex h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
           theme === "dark"
             ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
@@ -177,6 +195,16 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
           >
             Create, organize, and manage local FretForge projects.
           </p>
+
+          {projectAction.errorMessage && (
+            <p className="mt-3 text-sm text-red-400" role="alert">
+              {projectAction.errorMessage}
+            </p>
+          )}
+
+          {projectAction.isPending && (
+            <p className="mt-3 text-xs text-zinc-500">Updating project…</p>
+          )}
         </div>
 
         <div className="flex gap-3">

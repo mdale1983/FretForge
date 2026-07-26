@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getActiveProjectId } from "../services/projectService";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import {
   completeSession,
   getCompletedSessionsForProject,
@@ -25,6 +26,7 @@ function SessionPanel({
   refreshKey,
   onWorkstationStatusRefresh,
 }: SessionPanelProps) {
+  const sessionAction = useAsyncAction();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [isCompletedSessionsOpen, setIsCompletedSessionsOpen] = useState(false);
@@ -74,7 +76,7 @@ function SessionPanel({
       return;
     }
 
-    try {
+    await sessionAction.run(async () => {
       const newSession = await createSession(activeProjectId);
 
       if (newSession) {
@@ -83,19 +85,19 @@ function SessionPanel({
 
       await loadSessions();
       await onWorkstationStatusRefresh();
-    } catch (error) {
-      console.warn("New session failed:", error);
-      window.alert("Could not create a new session.");
-    }
+    }, "A new session could not be created.");
   }
 
   async function handleSelectSession(sessionId: number) {
+    await sessionAction.run(async () => {
     await setActiveSession(sessionId);
     await loadSessions();
     await onWorkstationStatusRefresh();
+    }, "The active session could not be changed.");
   }
 
   async function handleRenameSession(sessionId: number) {
+    await sessionAction.run(async () => {
     const trimmedName = renameValue.trim();
 
     if (!trimmedName) {
@@ -110,9 +112,11 @@ function SessionPanel({
 
     await loadSessions();
     await onWorkstationStatusRefresh();
+    }, "The session could not be renamed.");
   }
 
   async function handleSaveSessionNotes(sessionId: number) {
+    await sessionAction.run(async () => {
     await updateSessionNotes(sessionId, notesValue);
 
     setEditingNotesSessionId(null);
@@ -120,6 +124,7 @@ function SessionPanel({
 
     await loadSessions();
     await onWorkstationStatusRefresh();
+    }, "The session notes could not be saved.");
   }
 
   async function handleDeleteSession(sessionId: number) {
@@ -131,9 +136,9 @@ function SessionPanel({
 
     if (!confirmed) return;
 
-    const activeSessionId = await getActiveSessionId();
+    await sessionAction.run(async () => {
+      const activeSessionId = await getActiveSessionId();
 
-    try {
       if (activeSessionId === sessionId) {
         await switchToFallbackSessionBeforeDelete(activeProjectId, sessionId);
       }
@@ -142,10 +147,7 @@ function SessionPanel({
 
       await loadSessions();
       await onWorkstationStatusRefresh();
-    } catch (error) {
-      console.warn("Session delete failed:", error);
-      window.alert("Could not delete session safely.");
-    }
+    }, "The session could not be deleted safely.");
   }
 
   async function handleCompleteSession(session: Session) {
@@ -155,15 +157,20 @@ function SessionPanel({
 
     if (!confirmed) return;
 
+    await sessionAction.run(async () => {
     await completeSession(session.id);
 
     await loadSessions();
     await onWorkstationStatusRefresh();
+    }, "The session could not be completed.");
   }
 
   useEffect(() => {
-    loadSessions();
-  }, [refreshKey]);
+    sessionAction.run(
+      loadSessions,
+      "Sessions could not be loaded. Please try again."
+    );
+  }, [refreshKey, sessionAction.run]);
 
   useEffect(() => {
     const handleSessionsChanged = async () => {
@@ -186,6 +193,7 @@ function SessionPanel({
 
   return (
     <div
+      aria-busy={sessionAction.isPending}
       className={`flex h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
         theme === "dark"
           ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
@@ -196,6 +204,16 @@ function SessionPanel({
         <h2 className="mb-2 text-lg font-semibold tracking-tight sm:text-xl">
           Sessions
         </h2>
+
+        {sessionAction.errorMessage && (
+          <p className="mb-3 text-sm text-red-400" role="alert">
+            {sessionAction.errorMessage}
+          </p>
+        )}
+
+        {sessionAction.isPending && (
+          <p className="mb-3 text-xs text-zinc-500">Updating session…</p>
+        )}
 
         <div className="mb-5 flex flex-wrap gap-3">
           <button
