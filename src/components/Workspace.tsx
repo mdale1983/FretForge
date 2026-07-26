@@ -18,6 +18,7 @@ import {
 import ProjectPanel from "./ProjectPanel";
 import SessionPanel from "./SessionPanel";
 import ForgePulseWorkspace from "./workspaces/ForgePulseWorkspace";
+import ForgeTuneWorkspace from "./workspaces/ForgeTuneWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -68,13 +69,6 @@ function getWorkspaceCards(activeModule: string) {
         ["Imported Tracks", "Load and organize practice tracks."],
         ["Bookmarks", "Mark sections, riffs, solos, and transitions."],
         ["Looping", "Repeat difficult sections for focused practice."],
-      ];
-
-    case "tuner":
-      return [
-        ["ForgeTune", "Live tuner monitor ready."],
-        ["Pitch Detection", "Realtime pitch tracking placeholder."],
-        ["Tuning Stability", "Stability analysis placeholder."],
       ];
 
     case "pulse":
@@ -250,6 +244,12 @@ function Workspace({
           {activeModule === "pulse" && (
             <div className="col-span-full">
               <ForgePulseWorkspace theme={theme} />
+            </div>
+          )}
+
+          {activeModule === "tuner" && (
+            <div className="col-span-full">
+              <ForgeTuneWorkspace theme={theme} />
             </div>
           )}
 
