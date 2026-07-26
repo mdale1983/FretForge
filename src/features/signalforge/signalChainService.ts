@@ -1,0 +1,98 @@
+import { getDatabase } from "../../lib/database";
+
+export type SignalBlockType =
+  | "instrument"
+  | "pedal"
+  | "amp"
+  | "cab"
+  | "interface"
+  | "daw";
+
+export type SignalBlock = {
+  id: string;
+  type: SignalBlockType;
+  label: string;
+  bypassed: boolean;
+};
+
+export type SignalChain = {
+  id: number;
+  name: string;
+  blocks: SignalBlock[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type SignalChainRow = Omit<SignalChain, "blocks"> & { chain_json: string };
+
+export const defaultSignalBlocks: SignalBlock[] = [
+  { id: "instrument", type: "instrument", label: "Guitar", bypassed: false },
+  { id: "amp", type: "amp", label: "Amp", bypassed: false },
+  { id: "cab", type: "cab", label: "Cab / IR", bypassed: false },
+  { id: "interface", type: "interface", label: "Audio Interface", bypassed: false },
+];
+
+function parseChain(row: SignalChainRow): SignalChain {
+  let blocks = defaultSignalBlocks;
+
+  try {
+    const parsed = JSON.parse(row.chain_json);
+    if (Array.isArray(parsed)) blocks = parsed as SignalBlock[];
+  } catch {
+    blocks = defaultSignalBlocks;
+  }
+
+  return { ...row, blocks };
+}
+
+export async function getSignalChains() {
+  const database = await getDatabase();
+  const rows = await database.select<SignalChainRow[]>(
+    "SELECT * FROM signal_chains ORDER BY updated_at DESC"
+  );
+  return rows.map(parseChain);
+}
+
+export async function createSignalChain(
+  name: string,
+  blocks = defaultSignalBlocks,
+  notes = ""
+) {
+  const database = await getDatabase();
+  const now = new Date().toISOString();
+  const result = await database.execute(
+    `
+    INSERT INTO signal_chains (name, chain_json, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    `,
+    [name, JSON.stringify(blocks), notes, now, now]
+  );
+  const rows = await database.select<SignalChainRow[]>(
+    "SELECT * FROM signal_chains WHERE id = ? LIMIT 1",
+    [result.lastInsertId]
+  );
+  return rows[0] ? parseChain(rows[0]) : null;
+}
+
+export async function updateSignalChain(
+  id: number,
+  name: string,
+  blocks: SignalBlock[],
+  notes: string
+) {
+  const database = await getDatabase();
+  await database.execute(
+    `
+    UPDATE signal_chains
+    SET name = ?, chain_json = ?, notes = ?, updated_at = ?
+    WHERE id = ?
+    `,
+    [name, JSON.stringify(blocks), notes, new Date().toISOString(), id]
+  );
+}
+
+export async function deleteSignalChain(id: number) {
+  const database = await getDatabase();
+  await database.execute("DELETE FROM signal_chains WHERE id = ?", [id]);
+}

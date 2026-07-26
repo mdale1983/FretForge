@@ -103,4 +103,15 @@ export async function initializeDatabase() {
       updated_at TEXT NOT NULL
     );
   `);
+
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS signal_chains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      chain_json TEXT NOT NULL,
+      notes TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 }
