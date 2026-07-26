@@ -22,6 +22,7 @@ import ForgeTuneWorkspace from "./workspaces/ForgeTuneWorkspace";
 import JamForgeWorkspace from "./workspaces/JamForgeWorkspace";
 import ToneLabWorkspace from "./workspaces/ToneLabWorkspace";
 import SignalForgeWorkspace from "./workspaces/SignalForgeWorkspace";
+import WorkshopWorkspace from "./workspaces/WorkshopWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -256,6 +257,12 @@ function Workspace({
           {activeModule === "signal" && (
             <div className="col-span-full">
               <SignalForgeWorkspace theme={theme} />
+            </div>
+          )}
+
+          {activeModule === "workshop" && (
+            <div className="col-span-full">
+              <WorkshopWorkspace theme={theme} />
             </div>
           )}
 

@@ -114,4 +114,22 @@ export async function initializeDatabase() {
       updated_at TEXT NOT NULL
     );
   `);
+
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS instrument_setups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      instrument_name TEXT NOT NULL,
+      tuning TEXT NOT NULL,
+      string_gauge TEXT NOT NULL,
+      action_low TEXT NOT NULL,
+      action_high TEXT NOT NULL,
+      neck_relief TEXT NOT NULL,
+      pickup_height TEXT NOT NULL,
+      intonation_status TEXT NOT NULL,
+      service_date TEXT NOT NULL,
+      notes TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 }
