@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NewProjectModal from "./NewProjectModal";
 import {
   completeProject,
@@ -33,6 +33,23 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
   const [notesValue, setNotesValue] = useState("");
   const [projectPendingDelete, setProjectPendingDelete] =
     useState<Project | null>(null);
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectSort, setProjectSort] = useState<"recent" | "name">("recent");
+
+  const visibleProjects = useMemo(() => {
+    const normalizedQuery = projectQuery.trim().toLocaleLowerCase();
+    const filteredProjects = normalizedQuery
+      ? projects.filter((project) =>
+          project.name.toLocaleLowerCase().includes(normalizedQuery)
+        )
+      : projects;
+
+    return projectSort === "name"
+      ? [...filteredProjects].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        )
+      : filteredProjects;
+  }, [projectQuery, projectSort, projects]);
 
   useEffect(() => {
     projectAction.run(
@@ -226,8 +243,38 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
           </button>
         </div>
 
+        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+          <input
+            type="search"
+            value={projectQuery}
+            onChange={(event) => setProjectQuery(event.target.value)}
+            placeholder="Search projects"
+            aria-label="Search projects"
+            className={`min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 ${
+              theme === "dark"
+                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                : "border-zinc-300 bg-white text-zinc-900"
+            }`}
+          />
+          <select
+            value={projectSort}
+            onChange={(event) =>
+              setProjectSort(event.target.value as "recent" | "name")
+            }
+            aria-label="Sort projects"
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              theme === "dark"
+                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                : "border-zinc-300 bg-white text-zinc-900"
+            }`}
+          >
+            <option value="recent">Recent</option>
+            <option value="name">Name</option>
+          </select>
+        </div>
+
         <div className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {projects.length === 0 && (
+          {visibleProjects.length === 0 && (
             <div
               className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
                 theme === "dark"
@@ -235,12 +282,13 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                   : "border-zinc-300 bg-zinc-100 text-zinc-500"
               }`}
             >
-              No projects created yet. Create a project to begin building
-              sessions, tones, and practice workflows.
+              {projects.length === 0
+                ? "No projects created yet. Create a project to begin building sessions, tones, and practice workflows."
+                : `No projects match “${projectQuery.trim()}”.`}
             </div>
           )}
 
-          {projects.map((project) => {
+          {visibleProjects.map((project) => {
             const isActive = project.id === activeProjectId;
 
             return (

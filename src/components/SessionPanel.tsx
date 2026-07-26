@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getActiveProjectId } from "../services/projectService";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import {
@@ -41,6 +41,23 @@ function SessionPanel({
     useState<number | null>(null);
 
   const [notesValue, setNotesValue] = useState("");
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [sessionSort, setSessionSort] = useState<"recent" | "name">("recent");
+
+  const visibleSessions = useMemo(() => {
+    const normalizedQuery = sessionQuery.trim().toLocaleLowerCase();
+    const filteredSessions = normalizedQuery
+      ? sessions.filter((session) =>
+          session.name.toLocaleLowerCase().includes(normalizedQuery)
+        )
+      : sessions;
+
+    return sessionSort === "name"
+      ? [...filteredSessions].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        )
+      : filteredSessions;
+  }, [sessionQuery, sessionSort, sessions]);
 
   async function loadSessions() {
     const projectId = await getActiveProjectId();
@@ -251,13 +268,47 @@ function SessionPanel({
             theme === "dark" ? "text-zinc-400" : "text-zinc-600"
           }`}
         >
-          {sessions.length} saved session
+          {visibleSessions.length === sessions.length
+            ? sessions.length
+            : `${visibleSessions.length} of ${sessions.length}`} saved session
           {sessions.length === 1 ? "" : "s"} for the active project.
         </p>
+
+        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+          <input
+            type="search"
+            value={sessionQuery}
+            onChange={(event) => setSessionQuery(event.target.value)}
+            placeholder="Search sessions"
+            aria-label="Search sessions"
+            disabled={!activeProjectId}
+            className={`min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50 ${
+              theme === "dark"
+                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                : "border-zinc-300 bg-white text-zinc-900"
+            }`}
+          />
+          <select
+            value={sessionSort}
+            onChange={(event) =>
+              setSessionSort(event.target.value as "recent" | "name")
+            }
+            aria-label="Sort sessions"
+            disabled={!activeProjectId}
+            className={`rounded-lg border px-3 py-2 text-sm disabled:opacity-50 ${
+              theme === "dark"
+                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                : "border-zinc-300 bg-white text-zinc-900"
+            }`}
+          >
+            <option value="recent">Recent</option>
+            <option value="name">Name</option>
+          </select>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-        {sessions.length === 0 && (
+        {visibleSessions.length === 0 && (
           <div
             className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
               theme === "dark"
@@ -265,12 +316,15 @@ function SessionPanel({
                 : "border-zinc-300 bg-zinc-100 text-zinc-500"
             }`}
           >
-            No sessions found. Create a session to begin tracking recording,
-            practice, and workflow progress.
+            {!activeProjectId
+              ? "Select or create a project before managing sessions."
+              : sessions.length === 0
+                ? "No sessions found. Create a session to begin tracking recording, practice, and workflow progress."
+                : `No sessions match “${sessionQuery.trim()}”.`}
           </div>
         )}
 
-        {sessions.map((session) => {
+        {visibleSessions.map((session) => {
           const isActive = session.id === currentActiveSessionId;
 
           return (
