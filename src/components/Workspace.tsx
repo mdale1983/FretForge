@@ -19,6 +19,7 @@ import ProjectPanel from "./ProjectPanel";
 import SessionPanel from "./SessionPanel";
 import ForgePulseWorkspace from "./workspaces/ForgePulseWorkspace";
 import ForgeTuneWorkspace from "./workspaces/ForgeTuneWorkspace";
+import JamForgeWorkspace from "./workspaces/JamForgeWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -61,14 +62,6 @@ function getWorkspaceCards(activeModule: string) {
         ["Scales", "Scale shapes, intervals, and fretboard mapping."],
         ["Chords", "Chord construction and harmonic function."],
         ["Rhythm Theory", "Subdivision, accents, meter, and syncopation."],
-      ];
-
-    case "jam":
-      return [
-        ["JamForge", "Backing track and loop workspace."],
-        ["Imported Tracks", "Load and organize practice tracks."],
-        ["Bookmarks", "Mark sections, riffs, solos, and transitions."],
-        ["Looping", "Repeat difficult sections for focused practice."],
       ];
 
     case "pulse":
@@ -250,6 +243,12 @@ function Workspace({
           {activeModule === "tuner" && (
             <div className="col-span-full">
               <ForgeTuneWorkspace theme={theme} />
+            </div>
+          )}
+
+          {activeModule === "jam" && (
+            <div className="col-span-full">
+              <JamForgeWorkspace theme={theme} />
             </div>
           )}
 
