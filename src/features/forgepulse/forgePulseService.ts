@@ -17,6 +17,12 @@ export type ForgePulseRun = {
   completed_at: string;
 };
 
+export type ForgePulseSummary = {
+  runCount: number;
+  totalSeconds: number;
+  averageBpm: number;
+};
+
 type SaveForgePulseRunInput = {
   projectId: number | null;
   sessionId: number | null;
@@ -69,4 +75,31 @@ export async function getRecentForgePulseRuns(limit = 5) {
     `,
     [limit]
   );
+}
+
+export async function getForgePulseSummary(): Promise<ForgePulseSummary> {
+  const database = await getDatabase();
+  const rows = await database.select<
+    { run_count: number; total_seconds: number; average_bpm: number }[]
+  >(
+    `
+    SELECT
+      COUNT(*) AS run_count,
+      COALESCE(SUM(duration_seconds), 0) AS total_seconds,
+      COALESCE(AVG(bpm), 0) AS average_bpm
+    FROM forgepulse_runs
+    `
+  );
+  const summary = rows[0];
+
+  return {
+    runCount: summary?.run_count ?? 0,
+    totalSeconds: summary?.total_seconds ?? 0,
+    averageBpm: Math.round(summary?.average_bpm ?? 0),
+  };
+}
+
+export async function deleteForgePulseRun(runId: number) {
+  const database = await getDatabase();
+  await database.execute("DELETE FROM forgepulse_runs WHERE id = ?", [runId]);
 }

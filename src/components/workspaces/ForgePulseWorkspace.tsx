@@ -3,10 +3,14 @@ import { ForgePulseSessionView } from "../../features/forgepulse/components/Forg
 import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgePulseSetupView";
 import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
 import {
+  deleteForgePulseRun,
+  getForgePulseSummary,
   getRecentForgePulseRuns,
   saveForgePulseRun,
   type ForgePulseRun,
+  type ForgePulseSummary,
 } from "../../features/forgepulse/forgePulseService";
+import { Trash2 } from "lucide-react";
 import { getActiveProjectId } from "../../services/projectService";
 import { getActiveSessionId } from "../../services/SessionService";
 import {
@@ -62,6 +66,11 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   );
   const [volume, setVolume] = useState(initialPreferences.volume);
   const [recentRuns, setRecentRuns] = useState<ForgePulseRun[]>([]);
+  const [practiceSummary, setPracticeSummary] = useState<ForgePulseSummary>({
+    runCount: 0,
+    totalSeconds: 0,
+    averageBpm: 0,
+  });
   const [isSavingRun, setIsSavingRun] = useState(false);
   const [runSaveError, setRunSaveError] = useState("");
   const lastAutomaticCompletionRef = useRef(0);
@@ -103,8 +112,30 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   ]);
 
   const loadRecentRuns = useCallback(async () => {
-    setRecentRuns(await getRecentForgePulseRuns());
+    const [runs, summary] = await Promise.all([
+      getRecentForgePulseRuns(),
+      getForgePulseSummary(),
+    ]);
+
+    setRecentRuns(runs);
+    setPracticeSummary(summary);
   }, []);
+
+  async function handleDeleteRun(run: ForgePulseRun) {
+    const confirmed = window.confirm(
+      `Delete this ${run.duration_seconds}-second practice entry?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteForgePulseRun(run.id);
+      await loadRecentRuns();
+    } catch (error) {
+      console.error("ForgePulse run could not be deleted:", error);
+      setRunSaveError("This practice entry could not be deleted.");
+    }
+  }
 
   const recordRun = useCallback(
     async (durationSeconds: number) => {
@@ -151,7 +182,12 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   );
 
   useEffect(() => {
-    loadRecentRuns();
+    loadRecentRuns().catch((error) => {
+      console.error("ForgePulse history could not be loaded:", error);
+      setRunSaveError(
+        "Practice history is currently unavailable, but the metronome is ready."
+      );
+    });
   }, [loadRecentRuns]);
 
   useEffect(() => {
@@ -284,6 +320,34 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           )}
         </div>
 
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg bg-orange-500/10 p-3">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Runs</p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">
+              {practiceSummary.runCount}
+            </p>
+          </div>
+          <div className="rounded-lg bg-orange-500/10 p-3">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">
+              Practice Time
+            </p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">
+              {Math.floor(practiceSummary.totalSeconds / 60)}m
+              {" "}
+              {practiceSummary.totalSeconds % 60}s
+            </p>
+          </div>
+          <div className="rounded-lg bg-orange-500/10 p-3">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">
+              Average Tempo
+            </p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">
+              {practiceSummary.averageBpm || "—"}
+              {practiceSummary.averageBpm > 0 && " BPM"}
+            </p>
+          </div>
+        </div>
+
         {recentRuns.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
             Complete a metronome run to start building your practice history.
@@ -299,7 +363,18 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
                     : "border-zinc-200 bg-zinc-50"
                 }`}
               >
-                <p className="font-semibold">{run.bpm} BPM</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold">{run.bpm} BPM</p>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRun(run)}
+                    className="rounded p-1 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                    aria-label="Delete practice entry"
+                    title="Delete practice entry"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
                 <p className="mt-1 text-xs text-zinc-500">
                   {Math.floor(run.duration_seconds / 60)}m {run.duration_seconds % 60}s
                   {" · "}
