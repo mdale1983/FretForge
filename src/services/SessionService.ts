@@ -1,5 +1,5 @@
 import { getDatabase } from "../lib/database";
-import { getAppState, setAppState } from "./AppStateService";
+import { clearAppState, getAppState, setAppState } from "./AppStateService";
 import {
   Session,
   SessionWorkspaceState,
@@ -65,6 +65,24 @@ export async function getOrCreateSessionForProject(projectId: number) {
 
 // Active session coordination
 export async function setActiveSession(sessionId: number) {
+  const db = await getDatabase();
+  const sessions = await db.select<{ id: number; project_id: number }[]>(
+    `
+    SELECT id, project_id
+    FROM sessions
+    WHERE id = ?
+      AND completed_at IS NULL
+    LIMIT 1
+    `,
+    [sessionId]
+  );
+  const session = sessions[0];
+
+  if (!session) {
+    throw new Error("Cannot activate a missing or completed session.");
+  }
+
+  await setAppState("active_project_id", String(session.project_id));
   await setAppState("active_session_id", String(sessionId));
   await touchSession(sessionId);
 }
@@ -92,7 +110,37 @@ export async function getActiveSessionId(): Promise<number | null> {
   }
 
   const sessionId = Number(value);
-  return Number.isFinite(sessionId) ? sessionId : null;
+
+  if (!Number.isFinite(sessionId)) {
+    await clearAppState("active_session_id");
+    return null;
+  }
+
+  const db = await getDatabase();
+  const sessions = await db.select<{ id: number; project_id: number }[]>(
+    `
+    SELECT id, project_id
+    FROM sessions
+    WHERE id = ?
+      AND completed_at IS NULL
+    LIMIT 1
+    `,
+    [sessionId]
+  );
+
+  if (sessions.length === 0) {
+    await clearAppState("active_session_id");
+    await clearWorkspaceState();
+    return null;
+  }
+
+  const activeProjectId = await getAppState("active_project_id");
+
+  if (activeProjectId !== String(sessions[0].project_id)) {
+    await setAppState("active_project_id", String(sessions[0].project_id));
+  }
+
+  return sessionId;
 }
 
 // Active and completed session queries
@@ -198,6 +246,7 @@ export async function completeSession(sessionId: number) {
   const db = await getDatabase();
   const now = new Date().toISOString();
   const activeSessionId = await getActiveSessionId();
+  const session = await getSessionById(sessionId);
 
   await db.execute(
     `
@@ -211,8 +260,24 @@ export async function completeSession(sessionId: number) {
   );
 
   if (activeSessionId === sessionId) {
-    await setAppState("active_session_id", "");
     await clearWorkspaceState();
+
+    if (session) {
+      const fallbackSession = await getNextAvailableSessionForProject(
+        session.project_id,
+        sessionId
+      );
+      const nextSession =
+        fallbackSession ?? (await createRecoverySession(session.project_id));
+
+      if (nextSession) {
+        await setActiveSession(nextSession.id);
+      } else {
+        await clearAppState("active_session_id");
+      }
+    } else {
+      await clearAppState("active_session_id");
+    }
   }
 }
 

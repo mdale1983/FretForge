@@ -1,6 +1,6 @@
 import { getDatabase } from "../lib/database";
 import { Project } from "../types/project";
-import { getAppState, setAppState } from "./AppStateService";
+import { clearAppState, getAppState, setAppState } from "./AppStateService";
 import {
   getOrCreateSessionForProject,
   setActiveSession,
@@ -83,6 +83,20 @@ export async function getMostRecentProject(): Promise<Project | null> {
 // Active project coordination
 export async function setActiveProject(projectId: number) {
   const db = await getDatabase();
+  const matchingProjects = await db.select<{ id: number }[]>(
+    `
+    SELECT id
+    FROM projects
+    WHERE id = ?
+      AND completed_at IS NULL
+    LIMIT 1
+    `,
+    [projectId]
+  );
+
+  if (matchingProjects.length === 0) {
+    throw new Error("Cannot activate a missing or completed project.");
+  }
 
   const now = new Date().toISOString();
 
@@ -113,7 +127,30 @@ export async function getActiveProjectId(): Promise<number | null> {
   }
 
   const projectId = Number(value);
-  return Number.isFinite(projectId) ? projectId : null;
+
+  if (!Number.isFinite(projectId)) {
+    await clearAppState("active_project_id");
+    return null;
+  }
+
+  const db = await getDatabase();
+  const projects = await db.select<{ id: number }[]>(
+    `
+    SELECT id
+    FROM projects
+    WHERE id = ?
+      AND completed_at IS NULL
+    LIMIT 1
+    `,
+    [projectId]
+  );
+
+  if (projects.length === 0) {
+    await clearAppState("active_project_id");
+    return null;
+  }
+
+  return projectId;
 }
 
 export async function getProjectById(projectId: number): Promise<Project | null> {
@@ -170,6 +207,7 @@ export async function updateProjectNotes(projectId: number, notes: string) {
 // Project lifecycle
 export async function completeProject(projectId: number) {
   const db = await getDatabase();
+  const activeProjectId = await getActiveProjectId();
 
   const now = new Date().toISOString();
 
@@ -196,11 +234,9 @@ export async function completeProject(projectId: number) {
     [now, now, projectId]
   );
 
-  const activeProjectId = await getActiveProjectId();
-
   if (activeProjectId === projectId) {
-    await setAppState("active_project_id", "");
-    await setAppState("active_session_id", "");
+    await clearAppState("active_project_id");
+    await clearAppState("active_session_id");
   }
 }
 
