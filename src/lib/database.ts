@@ -1,20 +1,32 @@
 import Database from "@tauri-apps/plugin-sql";
 
-// Shared database connection
-let db: Database | null = null;
+let databasePromise: Promise<Database> | null = null;
 
 export async function getDatabase() {
-  if (db) return db;
+  databasePromise ??= Database.load("sqlite:fretforge.db");
+  return databasePromise;
+}
 
-  db = await Database.load("sqlite:fretforge.db");
+async function addColumnIfMissing(
+  database: Database,
+  table: "projects" | "sessions",
+  column: string,
+  definition: string
+) {
+  const columns = await database.select<{ name: string }[]>(
+    `PRAGMA table_info(${table})`
+  );
 
-  return db;
+  if (!columns.some((existingColumn) => existingColumn.name === column)) {
+    await database.execute(
+      `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`
+    );
+  }
 }
 
 export async function initializeDatabase() {
   const database = await getDatabase();
 
-  // Projects schema and additive migrations
   await database.execute(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,25 +38,9 @@ export async function initializeDatabase() {
     );
   `);
 
-  try {
-    await database.execute(`
-      ALTER TABLE projects
-      ADD COLUMN notes TEXT
-    `);
-  } catch {
-    // Column already exists
-  }
+  await addColumnIfMissing(database, "projects", "notes", "TEXT");
+  await addColumnIfMissing(database, "projects", "completed_at", "TEXT");
 
-  try {
-    await database.execute(`
-      ALTER TABLE projects
-      ADD COLUMN completed_at TEXT
-    `);
-  } catch {
-    // Column already exists
-  }
-
-  // Application state schema
   await database.execute(`
     CREATE TABLE IF NOT EXISTS app_state (
       key TEXT PRIMARY KEY,
@@ -53,7 +49,6 @@ export async function initializeDatabase() {
     )
   `);
 
-  // Sessions schema and additive migrations
   await database.execute(`
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,32 +63,12 @@ export async function initializeDatabase() {
     );
   `);
 
-  try {
-    await database.execute(`
-      ALTER TABLE sessions
-      ADD COLUMN active_workspace TEXT NOT NULL DEFAULT 'forge'
-    `);
-  } catch {
-    // Column already exists
-  }
-
-  try {
-    await database.execute(`
-      ALTER TABLE sessions
-      ADD COLUMN notes TEXT
-    `);
-  } catch {
-    // Column already exists
-  }
-
-  try {
-    await database.execute(`
-      ALTER TABLE sessions
-      ADD COLUMN completed_at TEXT
-    `);
-  } catch {
-    // Column already exists
-  }
-
-  console.log("FretForge database initialized.");
+  await addColumnIfMissing(
+    database,
+    "sessions",
+    "active_workspace",
+    "TEXT NOT NULL DEFAULT 'forge'"
+  );
+  await addColumnIfMissing(database, "sessions", "notes", "TEXT");
+  await addColumnIfMissing(database, "sessions", "completed_at", "TEXT");
 }

@@ -28,7 +28,7 @@ export async function createProject(
     SELECT *
     FROM projects
     WHERE name = ?
-    ORDER BY created_at DESC
+    ORDER BY id DESC
     LIMIT 1
     `,
     [name]

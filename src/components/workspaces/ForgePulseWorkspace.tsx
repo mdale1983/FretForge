@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { ForgePulseSessionView } from "../../features/forgepulse/components/ForgePulseSessionView";
 import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgePulseSetupView";
+import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
 
 import {
   type Subdivision,
   type TimeSignature,
-  type TransportStatus,
   type ForgePulseMode,
   type ForgePulseView,
 } from "../../features/forgepulse/forgePulseTypes";
@@ -37,10 +37,18 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   // Optional session behavior
   const [countInEnabled, setCountInEnabled] = useState(false);
   const [timerEnabled, setTimerEnabled] = useState(false);
+  const [durationMinutes, setDurationMinutes] = useState(5);
   const [accentEnabled, setAccentEnabled] = useState(true);
 
-  // Transport state is retained here until audio generation is connected
-  const [, setTransportStatus] = useState<TransportStatus>("idle");
+  const metronome = useMetronome({
+    bpm,
+    subdivision,
+    timeSignature,
+    accentEnabled,
+    countInEnabled,
+    timerEnabled,
+    durationMinutes,
+  });
 
   return (
     <section
@@ -59,8 +67,8 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           theme === "dark" ? "text-zinc-400" : "text-zinc-700"
         }`}
       >
-        Metronome workspace shell ready. Audio generation and session
-        persistence are intentionally not wired yet.
+        Configure a focused timing session, then practice with an audible,
+        accented click and live beat tracking.
       </p>
 
       {/* Active practice session */}
@@ -68,9 +76,16 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         <ForgePulseSessionView
           theme={theme}
           sessionTitle={modeSessionTitles[mode]}
-          onBack={() => setView("setup")}
-          onStart={() => setTransportStatus("playing")}
-          onStop={() => setTransportStatus("idle")}
+          bpm={bpm}
+          subdivision={subdivision}
+          timeSignature={timeSignature}
+          timerEnabled={timerEnabled}
+          durationMinutes={durationMinutes}
+          {...metronome}
+          onBack={() => {
+            metronome.stop();
+            setView("setup");
+          }}
         />
       )}
 
@@ -89,6 +104,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           sessionTitle={modeSessionTitles[mode]}
           countInEnabled={countInEnabled}
           timerEnabled={timerEnabled}
+          durationMinutes={durationMinutes}
           accentEnabled={accentEnabled}
           onModeChange={setMode}
           onBpmChange={setBpm}
@@ -96,6 +112,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           onTimeSignatureChange={setTimeSignature}
           onCountInChange={setCountInEnabled}
           onTimerChange={setTimerEnabled}
+          onDurationChange={setDurationMinutes}
           onAccentChange={setAccentEnabled}
           onStartSession={() => setView("session")}
         />

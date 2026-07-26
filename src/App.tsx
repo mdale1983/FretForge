@@ -163,29 +163,6 @@ function App() {
 
       await refreshWorkstationStatus();
 
-      if (workspaceState.activeSessionId) {
-        console.log(
-          "Restored workspace session:",
-          workspaceState.activeSessionId,
-          "module:",
-          workspaceState.activeModule,
-          "window:",
-          workspaceState.windowWidth,
-          "x",
-          workspaceState.windowHeight,
-          "screen:",
-          workspaceState.screenWidth,
-          "x",
-          workspaceState.screenHeight,
-          "position:",
-          workspaceState.windowX,
-          workspaceState.windowY,
-          "maximized:",
-          workspaceState.isMaximized,
-          "monitor:",
-          workspaceState.lastMonitorLabel
-        );
-      }
     }
 
     restoreWorkspace();

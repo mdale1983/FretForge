@@ -13,6 +13,7 @@ export type Subdivision =
 export type TransportStatus =
   | "idle"
   | "ready"
+  | "counting-in"
   | "playing";
 
 export type ForgePulseMode =

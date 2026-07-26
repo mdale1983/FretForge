@@ -181,7 +181,12 @@ export async function loadWorkspaceState(): Promise<SessionWorkspaceState | null
     return null;
   }
 
-  return JSON.parse(storedWorkspaceState);
+  try {
+    return JSON.parse(storedWorkspaceState) as SessionWorkspaceState;
+  } catch {
+    localStorage.removeItem("fretforge_workspace_state");
+    return null;
+  }
 }
 
 export async function clearWorkspaceState() {

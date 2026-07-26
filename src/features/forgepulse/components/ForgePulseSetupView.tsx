@@ -21,6 +21,7 @@ type ForgePulseSetupViewProps = {
     sessionTitle: string;
     countInEnabled: boolean;
     timerEnabled: boolean;
+    durationMinutes: number;
     accentEnabled: boolean;
 
     onModeChange: (value: ForgePulseMode) => void;
@@ -29,6 +30,7 @@ type ForgePulseSetupViewProps = {
     onTimeSignatureChange: (value: TimeSignature) => void;
     onCountInChange: (value: boolean) => void;
     onTimerChange: (value: boolean) => void;
+    onDurationChange: (value: number) => void;
     onAccentChange: (value: boolean) => void;
     onStartSession: () => void;
 };
@@ -48,6 +50,7 @@ export function ForgePulseSetupView({
 
     countInEnabled,
     timerEnabled,
+    durationMinutes,
     accentEnabled,
     onModeChange,
     onBpmChange,
@@ -55,6 +58,7 @@ export function ForgePulseSetupView({
     onTimeSignatureChange,
     onCountInChange,
     onTimerChange,
+    onDurationChange,
     onAccentChange,
     onStartSession,
 }: ForgePulseSetupViewProps) {
@@ -194,6 +198,29 @@ export function ForgePulseSetupView({
                 Accent Beat
             </label>
             </div>
+
+            {timerEnabled && (
+              <label className="mt-4 block text-xs uppercase tracking-wide text-zinc-500">
+                Session Length
+                <select
+                  className={`mt-2 block w-full rounded-lg border px-3 py-2 text-sm normal-case tracking-normal ${
+                    theme === "dark"
+                      ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                      : "border-zinc-300 bg-white text-zinc-900"
+                  }`}
+                  value={durationMinutes}
+                  onChange={(event) =>
+                    onDurationChange(Number(event.target.value))
+                  }
+                >
+                  <option value={1}>1 minute</option>
+                  <option value={5}>5 minutes</option>
+                  <option value={10}>10 minutes</option>
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                </select>
+              </label>
+            )}
         </ForgePulseCard>
 
     {/* Session Preview */}
