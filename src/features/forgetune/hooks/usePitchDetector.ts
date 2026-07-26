@@ -2,12 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 
-function detectFrequency(buffer: Float32Array, sampleRate: number) {
-  const signalLevel = Math.sqrt(
+function getSignalLevel(buffer: Float32Array) {
+  return Math.sqrt(
     buffer.reduce((sum, sample) => sum + sample * sample, 0) / buffer.length
   );
+}
 
-  if (signalLevel < 0.01) return null;
+function detectFrequency(buffer: Float32Array, sampleRate: number) {
+  const signalLevel = getSignalLevel(buffer);
+
+  if (signalLevel < 0.0025) return null;
 
   const minimumLag = Math.floor(sampleRate / 1_200);
   const maximumLag = Math.min(
@@ -61,11 +65,23 @@ export function usePitchDetector() {
   const [isListening, setIsListening] = useState(false);
   const [frequency, setFrequency] = useState<number | null>(null);
   const [clarity, setClarity] = useState(0);
+  const [inputLevel, setInputLevel] = useState(0);
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedInputId, setSelectedInputId] = useState("");
+  const [monitorEnabled, setMonitorEnabled] = useState(false);
+  const [monitorVolume, setMonitorVolume] = useState(0.35);
   const [errorMessage, setErrorMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const startRequestRef = useRef(0);
+  const monitorGainRef = useRef<GainNode | null>(null);
+
+  const refreshInputDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    setInputDevices(devices.filter((device) => device.kind === "audioinput"));
+  }, []);
 
   const stop = useCallback(() => {
     startRequestRef.current += 1;
@@ -78,9 +94,11 @@ export function usePitchDetector() {
     streamRef.current = null;
     audioContextRef.current?.close();
     audioContextRef.current = null;
+    monitorGainRef.current = null;
     setIsListening(false);
     setFrequency(null);
     setClarity(0);
+    setInputLevel(0);
   }, []);
 
   const start = useCallback(async () => {
@@ -96,6 +114,7 @@ export function usePitchDetector() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          deviceId: selectedInputId ? { exact: selectedInputId } : undefined,
           autoGainControl: false,
           echoCancellation: false,
           noiseSuppression: false,
@@ -126,19 +145,28 @@ export function usePitchDetector() {
 
       const analyser = context.createAnalyser();
       const source = context.createMediaStreamSource(stream);
+      const monitorGain = context.createGain();
       const samples = new Float32Array(2_048);
       let lastAnalysisAt = 0;
 
       analyser.fftSize = samples.length;
       analyser.smoothingTimeConstant = 0.15;
       source.connect(analyser);
+      source.connect(monitorGain);
+      monitorGain.connect(context.destination);
+      monitorGain.gain.value = monitorEnabled ? monitorVolume : 0;
       streamRef.current = stream;
       audioContextRef.current = context;
+      monitorGainRef.current = monitorGain;
+      const activeDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+      if (activeDeviceId) setSelectedInputId(activeDeviceId);
+      await refreshInputDevices();
       setIsListening(true);
 
       const analyze = (timestamp: number) => {
         if (timestamp - lastAnalysisAt >= 50) {
           analyser.getFloatTimeDomainData(samples);
+          setInputLevel(Math.min(1, getSignalLevel(samples) * 12));
           const detectedPitch = detectFrequency(samples, context.sampleRate);
 
           setFrequency(detectedPitch?.frequency ?? null);
@@ -156,7 +184,17 @@ export function usePitchDetector() {
         "Microphone access was denied or no input device is available."
       );
     }
-  }, [stop]);
+  }, [monitorEnabled, monitorVolume, refreshInputDevices, selectedInputId, stop]);
+
+  useEffect(() => {
+    refreshInputDevices().catch(() => undefined);
+  }, [refreshInputDevices]);
+
+  useEffect(() => {
+    if (monitorGainRef.current) {
+      monitorGainRef.current.gain.value = monitorEnabled ? monitorVolume : 0;
+    }
+  }, [monitorEnabled, monitorVolume]);
 
   useEffect(
     () => () => {
@@ -169,6 +207,14 @@ export function usePitchDetector() {
     isListening,
     frequency,
     clarity,
+    inputLevel,
+    inputDevices,
+    selectedInputId,
+    setSelectedInputId,
+    monitorEnabled,
+    setMonitorEnabled,
+    monitorVolume,
+    setMonitorVolume,
     pitch: frequency ? describePitch(frequency) : null,
     errorMessage,
     start,

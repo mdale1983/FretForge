@@ -55,6 +55,58 @@ export default function ForgeTuneWorkspace({ theme }: ForgeTuneWorkspaceProps) {
         </p>
       )}
 
+      <div className="mt-5 grid gap-4 rounded-xl border border-zinc-700/60 p-4 lg:grid-cols-2">
+        <label className="text-xs uppercase tracking-wide text-zinc-500">
+          Recording Input
+          <select
+            value={tuner.selectedInputId}
+            onChange={(event) => tuner.setSelectedInputId(event.target.value)}
+            disabled={tuner.isListening}
+            className={`mt-2 block w-full rounded-lg border px-3 py-2 text-sm normal-case disabled:opacity-60 ${
+              theme === "dark"
+                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                : "border-zinc-300 bg-white text-zinc-900"
+            }`}
+          >
+            <option value="">System default input</option>
+            {tuner.inputDevices.map((device, index) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Audio input ${index + 1}`}
+              </option>
+            ))}
+          </select>
+          <span className="mt-2 block normal-case tracking-normal text-zinc-600">
+            Device names may appear after microphone permission is granted.
+          </span>
+        </label>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={tuner.monitorEnabled}
+              onChange={(event) => tuner.setMonitorEnabled(event.target.checked)}
+              className="h-4 w-4 accent-orange-500"
+            />
+            Monitor guitar through FretForge
+          </label>
+          <input
+            type="range"
+            min={0.05}
+            max={0.75}
+            step={0.05}
+            value={tuner.monitorVolume}
+            onChange={(event) => tuner.setMonitorVolume(Number(event.target.value))}
+            disabled={!tuner.monitorEnabled}
+            aria-label="Monitor volume"
+            className="mt-3 w-full accent-orange-500 disabled:opacity-40"
+          />
+          <p className="mt-2 text-xs text-amber-400">
+            Use headphones before enabling monitoring to prevent feedback.
+          </p>
+        </div>
+      </div>
+
       <div className="mt-6 rounded-2xl border border-zinc-700/60 p-6 text-center sm:p-10">
         <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
           {tuner.isListening ? "Listening" : "Microphone Off"}
@@ -114,9 +166,20 @@ export default function ForgeTuneWorkspace({ theme }: ForgeTuneWorkspaceProps) {
         </div>
 
         {tuner.isListening && (
-          <p className="mt-5 text-xs text-zinc-600">
-            Signal confidence: {Math.round(tuner.clarity * 100)}%
-          </p>
+          <div className="mt-5">
+            <div className="mx-auto flex max-w-sm items-center gap-3">
+              <span className="text-xs text-zinc-600">Input</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-[width]"
+                  style={{ width: `${Math.max(2, tuner.inputLevel * 100)}%` }}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-zinc-600">
+              Signal confidence: {Math.round(tuner.clarity * 100)}%
+            </p>
+          </div>
         )}
       </div>
     </section>
