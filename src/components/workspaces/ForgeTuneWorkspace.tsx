@@ -76,7 +76,9 @@ export default function ForgeTuneWorkspace({ theme }: ForgeTuneWorkspaceProps) {
             ))}
           </select>
           <span className="mt-2 block normal-case tracking-normal text-zinc-600">
-            Device names may appear after microphone permission is granted.
+            {tuner.activeInputLabel
+              ? `Active: ${tuner.activeInputLabel}`
+              : "Device names may appear after microphone permission is granted."}
           </span>
         </label>
 
@@ -104,6 +106,13 @@ export default function ForgeTuneWorkspace({ theme }: ForgeTuneWorkspaceProps) {
           <p className="mt-2 text-xs text-amber-400">
             Use headphones before enabling monitoring to prevent feedback.
           </p>
+          {tuner.isListening && tuner.monitorEnabled && (
+            <p className="mt-2 text-xs text-zinc-500">
+              {tuner.isPreferredOutputRouted
+                ? "Monitoring routed to the top selected device."
+                : "Explicit output routing is unavailable; using the Windows default output."}
+            </p>
+          )}
         </div>
       </div>
 

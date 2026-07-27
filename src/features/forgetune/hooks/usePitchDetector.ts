@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  audioPreferenceChangedEvent,
+  findPreferredMediaDevice,
+  routeAudioContextToPreferredDevice,
+} from "../../../services/audioRoutingService";
 
 const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 
@@ -70,6 +75,10 @@ export function usePitchDetector() {
   const [selectedInputId, setSelectedInputId] = useState("");
   const [monitorEnabled, setMonitorEnabled] = useState(false);
   const [monitorVolume, setMonitorVolume] = useState(0.35);
+  const [activeInputLabel, setActiveInputLabel] = useState("");
+  const [isPreferredOutputRouted, setIsPreferredOutputRouted] = useState<
+    boolean | null
+  >(null);
   const [errorMessage, setErrorMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -99,6 +108,7 @@ export function usePitchDetector() {
     setFrequency(null);
     setClarity(0);
     setInputLevel(0);
+    setActiveInputLabel("");
   }, []);
 
   const start = useCallback(async () => {
@@ -112,7 +122,7 @@ export function usePitchDetector() {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      let stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: selectedInputId ? { exact: selectedInputId } : undefined,
           autoGainControl: false,
@@ -124,6 +134,30 @@ export function usePitchDetector() {
       if (requestId !== startRequestRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
+      }
+
+      const availableDevices = await navigator.mediaDevices.enumerateDevices();
+      const preferredInput = findPreferredMediaDevice(
+        availableDevices,
+        "audioinput"
+      );
+      const currentDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+
+      if (preferredInput && preferredInput.deviceId !== currentDeviceId) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: preferredInput.deviceId },
+            autoGainControl: false,
+            echoCancellation: false,
+            noiseSuppression: false,
+          },
+        });
+
+        if (requestId !== startRequestRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
       }
       const AudioContextClass =
         window.AudioContext ??
@@ -143,6 +177,15 @@ export function usePitchDetector() {
         await context.resume();
       }
 
+      try {
+        setIsPreferredOutputRouted(
+          await routeAudioContextToPreferredDevice(context)
+        );
+      } catch (error) {
+        console.warn("Preferred tuner output is unavailable:", error);
+        setIsPreferredOutputRouted(false);
+      }
+
       const analyser = context.createAnalyser();
       const source = context.createMediaStreamSource(stream);
       const monitorGain = context.createGain();
@@ -159,6 +202,7 @@ export function usePitchDetector() {
       audioContextRef.current = context;
       monitorGainRef.current = monitorGain;
       const activeDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+      setActiveInputLabel(stream.getAudioTracks()[0]?.label ?? "");
       if (activeDeviceId) setSelectedInputId(activeDeviceId);
       await refreshInputDevices();
       setIsListening(true);
@@ -196,6 +240,28 @@ export function usePitchDetector() {
     }
   }, [monitorEnabled, monitorVolume]);
 
+  useEffect(() => {
+    const applyPreferredOutput = async () => {
+      if (!audioContextRef.current) return;
+
+      try {
+        setIsPreferredOutputRouted(
+          await routeAudioContextToPreferredDevice(audioContextRef.current)
+        );
+      } catch (error) {
+        console.warn("Preferred tuner output is unavailable:", error);
+        setIsPreferredOutputRouted(false);
+      }
+    };
+
+    window.addEventListener(audioPreferenceChangedEvent, applyPreferredOutput);
+    return () =>
+      window.removeEventListener(
+        audioPreferenceChangedEvent,
+        applyPreferredOutput
+      );
+  }, []);
+
   useEffect(
     () => () => {
       stop();
@@ -215,6 +281,8 @@ export function usePitchDetector() {
     setMonitorEnabled,
     monitorVolume,
     setMonitorVolume,
+    activeInputLabel,
+    isPreferredOutputRouted,
     pitch: frequency ? describePitch(frequency) : null,
     errorMessage,
     start,

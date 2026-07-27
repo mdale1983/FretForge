@@ -4,6 +4,10 @@ import type {
   TimeSignature,
   TransportStatus,
 } from "../forgePulseTypes";
+import {
+  getPreferredAudioDeviceName,
+  routeAudioContextToPreferredDevice,
+} from "../../../services/audioRoutingService";
 
 const subdivisionMultiplier: Record<Subdivision, number> = {
   whole: 0.25,
@@ -46,6 +50,7 @@ export function useMetronome({
   const startedAtRef = useRef(0);
   const elapsedSecondsRef = useRef(0);
   const runningRef = useRef(false);
+  const routedPreferenceRef = useRef("");
   const stepRef = useRef(0);
 
   const beatsPerMeasure = Number(timeSignature.split("/")[0]);
@@ -62,6 +67,14 @@ export function useMetronome({
     const context =
       audioContextRef.current ?? new AudioContextClass();
     audioContextRef.current = context;
+
+    const preferredDevice = getPreferredAudioDeviceName();
+    if (preferredDevice !== routedPreferenceRef.current) {
+      routedPreferenceRef.current = preferredDevice;
+      routeAudioContextToPreferredDevice(context).catch((error) => {
+        console.warn("Preferred metronome output is unavailable:", error);
+      });
+    }
 
     const oscillator = context.createOscillator();
     const gain = context.createGain();

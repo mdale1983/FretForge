@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, Repeat2, Upload } from "lucide-react";
+import {
+  audioPreferenceChangedEvent,
+  routeMediaElementToPreferredDevice,
+} from "../../services/audioRoutingService";
 
 type JamForgeWorkspaceProps = {
   theme: string;
@@ -52,6 +56,9 @@ export default function JamForgeWorkspace({ theme }: JamForgeWorkspaceProps) {
     if (audioRef.current) {
       audioRef.current.src = objectUrl;
       audioRef.current.load();
+      routeMediaElementToPreferredDevice(audioRef.current).catch((error) => {
+        console.warn("Preferred JamForge output is unavailable:", error);
+      });
     }
   }
 
@@ -100,6 +107,22 @@ export default function JamForgeWorkspace({ theme }: JamForgeWorkspaceProps) {
     const audio = audioRef.current;
     if (audio) audio.playbackRate = playbackRate;
   }, [playbackRate]);
+
+  useEffect(() => {
+    const applyPreferredOutput = () => {
+      if (!audioRef.current) return;
+      routeMediaElementToPreferredDevice(audioRef.current).catch((error) => {
+        console.warn("Preferred JamForge output is unavailable:", error);
+      });
+    };
+
+    window.addEventListener(audioPreferenceChangedEvent, applyPreferredOutput);
+    return () =>
+      window.removeEventListener(
+        audioPreferenceChangedEvent,
+        applyPreferredOutput
+      );
+  }, []);
 
   useEffect(() => {
     return () => {

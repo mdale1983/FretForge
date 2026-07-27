@@ -5,6 +5,7 @@ import {
   getWorkstationTelemetry,
   listAudioOutputDevices,
 } from "../services/workstationTelemetryService";
+import { audioPreferenceChangedEvent } from "../services/audioRoutingService";
 
 export function useWorkstationTelemetry() {
   // Current telemetry snapshot and audio-device preference
@@ -67,6 +68,7 @@ export function useWorkstationTelemetry() {
       "fretforge.selectedAudioDevice",
       selectedAudioDevice
     );
+    window.dispatchEvent(new CustomEvent(audioPreferenceChangedEvent));
   }, [selectedAudioDevice]);
 
   return {
