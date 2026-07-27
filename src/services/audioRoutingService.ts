@@ -92,3 +92,22 @@ export async function routeMediaElementToPreferredDevice(
   await routableElement.setSinkId(output.deviceId);
   return true;
 }
+
+export async function routeMediaElementToDevice(
+  element: HTMLMediaElement,
+  deviceId: string
+) {
+  const routableElement = element as SinkSelectableMediaElement;
+  if (!routableElement.setSinkId || !deviceId) return false;
+  await routableElement.setSinkId(deviceId);
+  return true;
+}
+
+type OutputSelectableMediaDevices = MediaDevices & {
+  selectAudioOutput?: () => Promise<MediaDeviceInfo>;
+};
+
+export async function requestAudioOutputSelection() {
+  const mediaDevices = navigator.mediaDevices as OutputSelectableMediaDevices;
+  return mediaDevices.selectAudioOutput?.() ?? null;
+}

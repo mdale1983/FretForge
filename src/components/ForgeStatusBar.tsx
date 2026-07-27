@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { WorkstationStatus } from "../types/WorkstationStatus";
 
 type ForgeStatusBarProps = {
@@ -44,22 +44,67 @@ const tuningOptions: TuningOption[] = [
   { name: "E Standard 8", stringCount: 8, notes: ["E", "A", "D", "G", "C", "F", "A", "D"] },
 ];
 
-const demoCentsPattern = [0, -4, 2, 7, -1, -6, 1, 5];
+const pitchClasses: Record<string, number> = {
+  C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5,
+  "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11,
+};
+
+function targetFrequencies(tuning: TuningOption) {
+  const baseline = tuning.stringCount === 6 ? 40 : tuning.stringCount === 7 ? 35 : 30;
+  let previousMidi = baseline - 1;
+  return tuning.notes.map((note, index) => {
+    const pitchClass = pitchClasses[note];
+    let midi = index === 0
+      ? baseline + ((((pitchClass - baseline) % 12) + 18) % 12) - 6
+      : previousMidi + 1;
+    while (((midi % 12) + 12) % 12 !== pitchClass) midi += 1;
+    previousMidi = midi;
+    return 440 * 2 ** ((midi - 69) / 12);
+  });
+}
 
 function ForgeStatusBar({
   version,
   theme,
   setTheme,
   workstationStatus,
-  audioDevices,
-  selectedAudioDevice,
-  setSelectedAudioDevice,
 }: ForgeStatusBarProps) {
   const [stringCount, setStringCount] = useState<6 | 7 | 8>(6);
   const [selectedTuning, setSelectedTuning] = useState<TuningOption>(
     tuningOptions.find((tuning) => tuning.name === "C# Standard") ??
       tuningOptions[0]
   );
+  const [monitorRoute, setMonitorRoute] = useState(
+    () => localStorage.getItem("fretforge.monitorRoute") ?? "fretforge"
+  );
+
+  const changeMonitorRoute = (route: string) => {
+    setMonitorRoute(route);
+    localStorage.setItem("fretforge.monitorRoute", route);
+    window.dispatchEvent(new CustomEvent("fretforge:monitor-route", { detail: route }));
+  };
+  const [liveCents, setLiveCents] = useState<(number | null)[]>(
+    () => Array(selectedTuning.stringCount).fill(null)
+  );
+
+  useEffect(() => {
+    setLiveCents(Array(selectedTuning.stringCount).fill(null));
+    const targets = targetFrequencies(selectedTuning);
+    const handlePitch = (event: Event) => {
+      const { frequency, clarity, isListening } = (event as CustomEvent<{
+        frequency: number | null; clarity: number; isListening: boolean;
+      }>).detail;
+      if (!isListening || !frequency || clarity < 0.75) return;
+      const offsets = targets.map((target) => 1200 * Math.log2(frequency / target));
+      const activeIndex = offsets.reduce((best, value, index) =>
+        Math.abs(value) < Math.abs(offsets[best]) ? index : best, 0);
+      if (Math.abs(offsets[activeIndex]) > 300) return;
+      setLiveCents((current) => current.map((value, index) =>
+        index === activeIndex ? Math.round(offsets[activeIndex]) : value));
+    };
+    window.addEventListener("fretforge:tuner-pitch", handlePitch);
+    return () => window.removeEventListener("fretforge:tuner-pitch", handlePitch);
+  }, [selectedTuning]);
 
   const availableTunings = tuningOptions.filter(
     (tuning) => tuning.stringCount === stringCount
@@ -159,26 +204,18 @@ function ForgeStatusBar({
 
           <div className="flex flex-col items-center gap-1.5">
             <select
-              value={selectedAudioDevice}
-              onChange={(event) =>
-                setSelectedAudioDevice(event.target.value)
-              }
+              value={monitorRoute}
+              onChange={(event) => changeMonitorRoute(event.target.value)}
               className={`w-64 rounded-md border px-3 py-1 text-xs font-medium outline-none ${selectClass}`}
             >
-              {audioDevices.map((device) => (
-                <option
-                  key={device.name}
-                  value={device.name}
-                >
-                  {device.name}
-                </option>
-              ))}
+              <option value="fretforge">FretForge ASIO → AXE outputs 1–2</option>
+              <option value="direct">AXE hardware/direct monitoring</option>
             </select>
 
             <div
               className={`w-64 rounded-md border px-3 py-1 text-xs font-medium ${tileClass}`}
             >
-              {workstationStatus.sampleRate}
+              AXE IO ONE · ASIO · 48 kHz
             </div>
 
             <div className="grid w-64 grid-cols-2 gap-1.5">
@@ -276,14 +313,19 @@ function ForgeStatusBar({
 
             <div className="flex flex-wrap items-center justify-center gap-1.5">
               {selectedTuning.notes.map((note, index) => {
-                const cents = demoCentsPattern[index] ?? 0;
-                const isInTune = Math.abs(cents) <= 2;
+                const cents = liveCents[index];
+                const hasReading = cents !== null;
+                const isInTune = hasReading && Math.abs(cents) <= 2;
 
                 return (
                   <div
                     key={`${selectedTuning.name}-${index}-${note}`}
                     className={`flex h-[4.5rem] w-12 flex-col items-center justify-center rounded-md border transition-all duration-200 ${
-                      isInTune
+                      !hasReading
+                        ? theme === "dark"
+                          ? "border-zinc-700 bg-zinc-950"
+                          : "border-zinc-300 bg-zinc-50"
+                        : isInTune
                         ? theme === "dark"
                           ? "border-emerald-500/50 bg-emerald-500/10"
                           : "border-emerald-500/50 bg-emerald-100"
@@ -331,7 +373,9 @@ function ForgeStatusBar({
                           : "text-orange-700"
                       }`}
                     >
-                      {isInTune
+                      {!hasReading
+                        ? "—"
+                        : isInTune
                         ? "✓"
                         : `${cents > 0 ? "+" : ""}${cents}¢`}
                     </span>

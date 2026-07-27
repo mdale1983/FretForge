@@ -101,7 +101,7 @@ export const modules = [
     id: "studio",
     icon: Mic2,
     name: "Studio Path",
-    description: "Recording workflow guidance and session discipline.",
+    description: "DAW integration, recording workflows, session setup, and project handoff.",
   },
   {
     id: "mentor",

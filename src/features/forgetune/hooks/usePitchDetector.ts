@@ -1,67 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  audioPreferenceChangedEvent,
-  findPreferredMediaDevice,
-  routeAudioContextToPreferredDevice,
-} from "../../../services/audioRoutingService";
+  getNativeTunerState,
+  setNativeAudioMonitorVolume,
+  startNativeAudioMonitor,
+  stopNativeAudioMonitor,
+  testNativeAudioOutput,
+} from "../../../services/nativeAudioService";
+import { getFretForgeLinkState } from "../../../services/studioApplicationService";
 
 const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
-
-function getSignalLevel(buffer: Float32Array) {
-  return Math.sqrt(
-    buffer.reduce((sum, sample) => sum + sample * sample, 0) / buffer.length
-  );
-}
-
-function detectFrequency(buffer: Float32Array, sampleRate: number) {
-  const signalLevel = getSignalLevel(buffer);
-
-  if (signalLevel < 0.0025) return null;
-
-  const minimumLag = Math.floor(sampleRate / 1_200);
-  const maximumLag = Math.min(
-    Math.floor(sampleRate / 55),
-    buffer.length - 1
-  );
-  let bestLag = -1;
-  let bestCorrelation = 0;
-
-  for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
-    let correlation = 0;
-    let leftEnergy = 0;
-    let rightEnergy = 0;
-
-    for (let index = 0; index < buffer.length - lag; index += 1) {
-      const left = buffer[index];
-      const right = buffer[index + lag];
-      correlation += left * right;
-      leftEnergy += left * left;
-      rightEnergy += right * right;
-    }
-
-    const normalizedCorrelation =
-      correlation / Math.sqrt(leftEnergy * rightEnergy || 1);
-
-    if (normalizedCorrelation > bestCorrelation) {
-      bestCorrelation = normalizedCorrelation;
-      bestLag = lag;
-    }
-  }
-
-  if (bestLag < 0 || bestCorrelation < 0.75) return null;
-  return { frequency: sampleRate / bestLag, clarity: bestCorrelation };
-}
 
 function describePitch(frequency: number) {
   const midiNote = Math.round(69 + 12 * Math.log2(frequency / 440));
   const targetFrequency = 440 * 2 ** ((midiNote - 69) / 12);
-  const cents = Math.round(1_200 * Math.log2(frequency / targetFrequency));
-  const noteIndex = ((midiNote % 12) + 12) % 12;
-
   return {
-    note: noteNames[noteIndex],
+    note: noteNames[((midiNote % 12) + 12) % 12],
     octave: Math.floor(midiNote / 12) - 1,
-    cents,
+    cents: Math.round(1200 * Math.log2(frequency / targetFrequency)),
     targetFrequency,
   };
 }
@@ -71,221 +26,111 @@ export function usePitchDetector() {
   const [frequency, setFrequency] = useState<number | null>(null);
   const [clarity, setClarity] = useState(0);
   const [inputLevel, setInputLevel] = useState(0);
-  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedInputId, setSelectedInputId] = useState("");
-  const [monitorEnabled, setMonitorEnabled] = useState(false);
-  const [monitorVolume, setMonitorVolume] = useState(0.35);
+  const [channelLevels, setChannelLevels] = useState<number[]>([]);
+  const [activeChannel, setActiveChannel] = useState(1);
+  const [monitorEnabled, setMonitorEnabled] = useState(
+    () => localStorage.getItem("fretforge.monitorRoute") !== "direct"
+  );
+  const [monitorVolume, setMonitorVolumeState] = useState(() => {
+    const saved = Number(localStorage.getItem("fretforge.asioMonitorVolume"));
+    return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.35;
+  });
   const [activeInputLabel, setActiveInputLabel] = useState("");
-  const [isPreferredOutputRouted, setIsPreferredOutputRouted] = useState<
-    boolean | null
-  >(null);
+  const [nativeMonitorStatus, setNativeMonitorStatus] = useState("");
+  const [nativeMonitorError, setNativeMonitorError] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const startRequestRef = useRef(0);
-  const monitorGainRef = useRef<GainNode | null>(null);
-
-  const refreshInputDevices = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    setInputDevices(devices.filter((device) => device.kind === "audioinput"));
-  }, []);
+  const pollRef = useRef<number | null>(null);
+  const usingDawLinkRef = useRef(false);
 
   const stop = useCallback(() => {
-    startRequestRef.current += 1;
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    audioContextRef.current?.close();
-    audioContextRef.current = null;
-    monitorGainRef.current = null;
-    setIsListening(false);
-    setFrequency(null);
-    setClarity(0);
-    setInputLevel(0);
-    setActiveInputLabel("");
+    if (pollRef.current !== null) window.clearInterval(pollRef.current);
+    pollRef.current = null;
+    usingDawLinkRef.current = false;
+    stopNativeAudioMonitor().catch(() => undefined);
+    setIsListening(false); setFrequency(null); setClarity(0); setInputLevel(0);
+    setChannelLevels([]); setNativeMonitorStatus("");
   }, []);
 
   const start = useCallback(async () => {
     stop();
-    const requestId = startRequestRef.current;
-    setErrorMessage("");
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMessage("Microphone access is unavailable on this device.");
-      return;
-    }
-
     try {
-      let stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: selectedInputId ? { exact: selectedInputId } : undefined,
-          autoGainControl: false,
-          echoCancellation: false,
-          noiseSuppression: false,
-        },
-      });
-
-      if (requestId !== startRequestRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
+      setErrorMessage(""); setNativeMonitorError("");
+      const link = await getFretForgeLinkState().catch(() => null);
+      if (link?.connected) {
+        usingDawLinkRef.current = true;
+        setActiveInputLabel(`REAPER · FretForge Link · ${Math.round(link.sample_rate / 1000)} kHz`);
+        setNativeMonitorStatus("DAW monitoring active — REAPER controls the guitar output.");
+        setIsListening(true);
+        const poll = async () => {
+          try {
+            const state = await getFretForgeLinkState();
+            if (!state.connected) { setErrorMessage("FretForge Link disconnected. Return to Studio Path or restart the tuner to use native ASIO."); return; }
+            setFrequency(state.frequency > 0 ? state.frequency : null);
+            setClarity(state.clarity); setInputLevel(Math.min(1, state.input_peak * 4));
+            setChannelLevels([state.input_peak]); setActiveChannel(1);
+          } catch (error) { setErrorMessage(String(error)); }
+        };
+        await poll();
+        pollRef.current = window.setInterval(poll, 75);
         return;
       }
-
-      const availableDevices = await navigator.mediaDevices.enumerateDevices();
-      const preferredInput = findPreferredMediaDevice(
-        availableDevices,
-        "audioinput"
-      );
-      const currentDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
-
-      if (preferredInput && preferredInput.deviceId !== currentDeviceId) {
-        stream.getTracks().forEach((track) => track.stop());
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: { exact: preferredInput.deviceId },
-            autoGainControl: false,
-            echoCancellation: false,
-            noiseSuppression: false,
-          },
-        });
-
-        if (requestId !== startRequestRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-      }
-      const AudioContextClass =
-        window.AudioContext ??
-        (window as typeof window & {
-          webkitAudioContext?: typeof AudioContext;
-        }).webkitAudioContext;
-
-      if (!AudioContextClass) {
-        stream.getTracks().forEach((track) => track.stop());
-        setErrorMessage("Live audio analysis is unavailable on this device.");
-        return;
-      }
-
-      const context = new AudioContextClass();
-
-      if (context.state === "suspended") {
-        await context.resume();
-      }
-
-      try {
-        setIsPreferredOutputRouted(
-          await routeAudioContextToPreferredDevice(context)
-        );
-      } catch (error) {
-        console.warn("Preferred tuner output is unavailable:", error);
-        setIsPreferredOutputRouted(false);
-      }
-
-      const analyser = context.createAnalyser();
-      const source = context.createMediaStreamSource(stream);
-      const monitorGain = context.createGain();
-      const samples = new Float32Array(2_048);
-      let lastAnalysisAt = 0;
-
-      analyser.fftSize = samples.length;
-      analyser.smoothingTimeConstant = 0.15;
-      source.connect(analyser);
-      source.connect(monitorGain);
-      monitorGain.connect(context.destination);
-      monitorGain.gain.value = monitorEnabled ? monitorVolume : 0;
-      streamRef.current = stream;
-      audioContextRef.current = context;
-      monitorGainRef.current = monitorGain;
-      const activeDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
-      setActiveInputLabel(stream.getAudioTracks()[0]?.label ?? "");
-      if (activeDeviceId) setSelectedInputId(activeDeviceId);
-      await refreshInputDevices();
-      setIsListening(true);
-
-      const analyze = (timestamp: number) => {
-        if (timestamp - lastAnalysisAt >= 50) {
-          analyser.getFloatTimeDomainData(samples);
-          setInputLevel(Math.min(1, getSignalLevel(samples) * 12));
-          const detectedPitch = detectFrequency(samples, context.sampleRate);
-
-          setFrequency(detectedPitch?.frequency ?? null);
-          setClarity(detectedPitch?.clarity ?? 0);
-          lastAnalysisAt = timestamp;
-        }
-
-        animationFrameRef.current = requestAnimationFrame(analyze);
+      usingDawLinkRef.current = false;
+      const status = await startNativeAudioMonitor("AXE IO ONE", "AXE IO ONE Input 1", monitorEnabled ? monitorVolume : 0);
+      setActiveInputLabel("AXE IO ONE · ASIO Input 1 · 48 kHz");
+      setNativeMonitorStatus(status); setIsListening(true);
+      const poll = async () => {
+        try {
+          const state = await getNativeTunerState();
+          setFrequency(state.frequency); setClarity(state.clarity);
+          setInputLevel(Math.min(1, state.input_level * 12));
+          setChannelLevels(state.channel_levels); setActiveChannel(state.active_channel);
+        } catch (error) { setErrorMessage(String(error)); }
       };
-
-      animationFrameRef.current = requestAnimationFrame(analyze);
-    } catch (error) {
-      console.error("ForgeTune microphone could not start:", error);
-      setErrorMessage(
-        "Microphone access was denied or no input device is available."
-      );
-    }
-  }, [monitorEnabled, monitorVolume, refreshInputDevices, selectedInputId, stop]);
+      await poll();
+      pollRef.current = window.setInterval(poll, 75);
+    } catch (error) { setErrorMessage(String(error)); }
+  }, [monitorEnabled, monitorVolume, stop]);
 
   useEffect(() => {
-    refreshInputDevices().catch(() => undefined);
-  }, [refreshInputDevices]);
-
+    if (isListening && !usingDawLinkRef.current) setNativeAudioMonitorVolume(monitorEnabled ? monitorVolume : 0)
+      .catch((error) => setNativeMonitorError(String(error)));
+  }, [isListening, monitorEnabled, monitorVolume]);
   useEffect(() => {
-    if (monitorGainRef.current) {
-      monitorGainRef.current.gain.value = monitorEnabled ? monitorVolume : 0;
-    }
-  }, [monitorEnabled, monitorVolume]);
-
+    window.dispatchEvent(new CustomEvent("fretforge:tuner-pitch", {
+      detail: { frequency, clarity, isListening },
+    }));
+  }, [clarity, frequency, isListening]);
+  const setMonitorVolume = (volume: number) => {
+    setMonitorVolumeState(volume);
+    localStorage.setItem("fretforge.asioMonitorVolume", String(volume));
+  };
+  const monitorRoute = monitorEnabled ? "fretforge" : "direct";
+  const setMonitorRoute = (route: string) => {
+    const enabled = route === "fretforge";
+    setMonitorEnabled(enabled);
+    localStorage.setItem("fretforge.monitorRoute", enabled ? "fretforge" : "direct");
+  };
   useEffect(() => {
-    const applyPreferredOutput = async () => {
-      if (!audioContextRef.current) return;
-
-      try {
-        setIsPreferredOutputRouted(
-          await routeAudioContextToPreferredDevice(audioContextRef.current)
-        );
-      } catch (error) {
-        console.warn("Preferred tuner output is unavailable:", error);
-        setIsPreferredOutputRouted(false);
-      }
+    const handleRoute = (event: Event) => {
+      setMonitorEnabled((event as CustomEvent<string>).detail === "fretforge");
     };
-
-    window.addEventListener(audioPreferenceChangedEvent, applyPreferredOutput);
-    return () =>
-      window.removeEventListener(
-        audioPreferenceChangedEvent,
-        applyPreferredOutput
-      );
+    window.addEventListener("fretforge:monitor-route", handleRoute);
+    return () => window.removeEventListener("fretforge:monitor-route", handleRoute);
   }, []);
+  useEffect(() => () => stop(), [stop]);
 
-  useEffect(
-    () => () => {
-      stop();
-    },
-    [stop]
-  );
+  const testOutput = async () => {
+    try { setNativeMonitorError(""); setNativeMonitorStatus(await testNativeAudioOutput("AXE IO ONE")); }
+    catch (error) { setNativeMonitorError(String(error)); }
+  };
 
   return {
-    isListening,
-    frequency,
-    clarity,
-    inputLevel,
-    inputDevices,
-    selectedInputId,
-    setSelectedInputId,
-    monitorEnabled,
-    setMonitorEnabled,
-    monitorVolume,
-    setMonitorVolume,
-    activeInputLabel,
-    isPreferredOutputRouted,
-    pitch: frequency ? describePitch(frequency) : null,
-    errorMessage,
-    start,
-    stop,
+    isListening, frequency, clarity, inputLevel, channelLevels, activeChannel,
+    inputDevices: [{ name: "AXE IO ONE", sample_rate: "48 kHz ASIO" }],
+    selectedInputDevice: "AXE IO ONE", setSelectedInputDevice: (_value: string) => undefined,
+    monitorEnabled, setMonitorEnabled, monitorRoute, setMonitorRoute,
+    monitorVolume, setMonitorVolume,
+    activeInputLabel, nativeMonitorStatus, nativeMonitorError, testOutput,
+    pitch: frequency ? describePitch(frequency) : null, errorMessage, start, stop,
   };
 }
