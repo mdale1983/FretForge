@@ -5,13 +5,15 @@
 #pragma once
 
 #include "public.sdk/source/vst/vsteditcontroller.h"
+#include "pluginterfaces/vst/ivstchannelcontextinfo.h"
 
 namespace Steinberg {
 
 //------------------------------------------------------------------------
 //  HelloWorldController
 //------------------------------------------------------------------------
-class HelloWorldController : public Steinberg::Vst::EditControllerEx1
+class HelloWorldController : public Steinberg::Vst::EditControllerEx1,
+                             public Steinberg::Vst::ChannelContext::IInfoListener
 {
 public:
 //------------------------------------------------------------------------
@@ -33,6 +35,7 @@ public:
 	Steinberg::IPlugView* PLUGIN_API createView (Steinberg::FIDString name) SMTG_OVERRIDE;
 	Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) SMTG_OVERRIDE;
 	Steinberg::tresult PLUGIN_API getState (Steinberg::IBStream* state) SMTG_OVERRIDE;
+	Steinberg::tresult PLUGIN_API setChannelContextInfos (Steinberg::Vst::IAttributeList* list) SMTG_OVERRIDE;
 	Steinberg::tresult PLUGIN_API setParamNormalized (Steinberg::Vst::ParamID tag,
                                                       Steinberg::Vst::ParamValue value) SMTG_OVERRIDE;
 	Steinberg::tresult PLUGIN_API getParamStringByValue (Steinberg::Vst::ParamID tag,
@@ -44,8 +47,7 @@ public:
 
  	//---Interface---------
 	DEFINE_INTERFACES
-		// Here you can add more supported VST3 interfaces
-		// DEF_INTERFACE (Vst::IXXX)
+		DEF_INTERFACE (Vst::ChannelContext::IInfoListener)
 	END_DEFINE_INTERFACES (EditController)
     DELEGATE_REFCOUNT (EditController)
 

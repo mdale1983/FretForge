@@ -7,7 +7,9 @@
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <atomic>
 #include <array>
+#include <string>
 #include <thread>
+#include <mutex>
 
 namespace Steinberg {
 
@@ -50,12 +52,14 @@ public:
 	/** For persistence */
 	Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) SMTG_OVERRIDE;
 	Steinberg::tresult PLUGIN_API getState (Steinberg::IBStream* state) SMTG_OVERRIDE;
+	Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) SMTG_OVERRIDE;
 
 //------------------------------------------------------------------------
 protected:
-	Vst::ParamValue mParam1 = 0;
-	int16 mParam2 = 0;
 	bool mBypass = false;
+	std::string mInstanceId;
+	std::string mSourceName {"FretForge Link"};
+	std::mutex mSourceNameMutex;
 	std::atomic<bool> mTelemetryRunning {false};
 	std::atomic<float> mInputRms {0.0f};
 	std::atomic<float> mInputPeak {0.0f};
@@ -70,6 +74,7 @@ protected:
 	void stopTelemetry ();
 	void writeTelemetry (bool connected);
 	void analyzePitch ();
+	static std::string createInstanceId ();
 };
 
 //------------------------------------------------------------------------

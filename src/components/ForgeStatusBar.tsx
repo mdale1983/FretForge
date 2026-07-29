@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WorkstationStatus } from "../types/WorkstationStatus";
 
 type ForgeStatusBarProps = {
@@ -86,9 +86,14 @@ function ForgeStatusBar({
   const [liveCents, setLiveCents] = useState<(number | null)[]>(
     () => Array(selectedTuning.stringCount).fill(null)
   );
+  const liveCentsRef = useRef<(number | null)[]>(liveCents);
+  const pitchCandidateRef = useRef<{ index: number; readings: number[] } | null>(null);
 
   useEffect(() => {
-    setLiveCents(Array(selectedTuning.stringCount).fill(null));
+    const emptyReadings = Array(selectedTuning.stringCount).fill(null);
+    setLiveCents(emptyReadings);
+    liveCentsRef.current = emptyReadings;
+    pitchCandidateRef.current = null;
     const targets = targetFrequencies(selectedTuning);
     const handlePitch = (event: Event) => {
       const { frequency, clarity, isListening } = (event as CustomEvent<{
@@ -99,8 +104,27 @@ function ForgeStatusBar({
       const activeIndex = offsets.reduce((best, value, index) =>
         Math.abs(value) < Math.abs(offsets[best]) ? index : best, 0);
       if (Math.abs(offsets[activeIndex]) > 300) return;
-      setLiveCents((current) => current.map((value, index) =>
-        index === activeIndex ? Math.round(offsets[activeIndex]) : value));
+      const cents = Math.round(offsets[activeIndex]);
+      const previousCandidate = pitchCandidateRef.current;
+      const candidate = previousCandidate?.index === activeIndex &&
+        Math.abs(previousCandidate.readings[previousCandidate.readings.length - 1] - cents) <= 8
+        ? { index: activeIndex, readings: [...previousCandidate.readings.slice(-7), cents] }
+        : { index: activeIndex, readings: [cents] };
+      pitchCandidateRef.current = candidate;
+
+      const previousReading = liveCentsRef.current[activeIndex];
+      const replacingConfirmedTune = previousReading !== null && Math.abs(previousReading) <= 2 && Math.abs(cents) > 2;
+      const requiredReadings = replacingConfirmedTune ? 8 : 4;
+      if (candidate.readings.length < requiredReadings) return;
+      const spread = Math.max(...candidate.readings) - Math.min(...candidate.readings);
+      if (spread > 5) return;
+      const sorted = [...candidate.readings].sort((left, right) => left - right);
+      const settledCents = sorted[Math.floor(sorted.length / 2)];
+      setLiveCents((current) => {
+        const next = current.map((value, index) => index === activeIndex ? settledCents : value);
+        liveCentsRef.current = next;
+        return next;
+      });
     };
     window.addEventListener("fretforge:tuner-pitch", handlePitch);
     return () => window.removeEventListener("fretforge:tuner-pitch", handlePitch);

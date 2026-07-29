@@ -55,15 +55,18 @@ export function usePitchDetector() {
     stop();
     try {
       setErrorMessage(""); setNativeMonitorError("");
-      const link = await getFretForgeLinkState().catch(() => null);
+      const selectedLinkId = localStorage.getItem("fretforge.selectedLinkSource") ?? undefined;
+      const linkNames = JSON.parse(localStorage.getItem("fretforge.linkSourceNames") ?? "{}") as Record<string, string>;
+      const link = await getFretForgeLinkState(selectedLinkId).catch(() => null);
       if (link?.connected) {
         usingDawLinkRef.current = true;
-        setActiveInputLabel(`REAPER · FretForge Link · ${Math.round(link.sample_rate / 1000)} kHz`);
+        const sourceName = linkNames[link.instance_id] || link.source_name;
+        setActiveInputLabel(`REAPER · ${sourceName} · ${Math.round(link.sample_rate / 1000)} kHz`);
         setNativeMonitorStatus("DAW monitoring active — REAPER controls the guitar output.");
         setIsListening(true);
         const poll = async () => {
           try {
-            const state = await getFretForgeLinkState();
+            const state = await getFretForgeLinkState(link.instance_id);
             if (!state.connected) { setErrorMessage("FretForge Link disconnected. Return to Studio Path or restart the tuner to use native ASIO."); return; }
             setFrequency(state.frequency > 0 ? state.frequency : null);
             setClarity(state.clarity); setInputLevel(Math.min(1, state.input_peak * 4));

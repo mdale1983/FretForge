@@ -2,6 +2,14 @@ import { getDatabase } from "../../lib/database";
 
 export type SignalBlockType =
   | "instrument"
+  | "wireless"
+  | "tuner"
+  | "noise_gate"
+  | "compressor"
+  | "overdrive"
+  | "distortion"
+  | "delay"
+  | "eq"
   | "pedal"
   | "amp"
   | "cab"
@@ -27,11 +35,16 @@ export type SignalChain = {
 type SignalChainRow = Omit<SignalChain, "blocks"> & { chain_json: string };
 
 export const defaultSignalBlocks: SignalBlock[] = [
-  { id: "instrument", type: "instrument", label: "Guitar", bypassed: false },
-  { id: "amp", type: "amp", label: "Amp", bypassed: false },
-  { id: "cab", type: "cab", label: "Cab / IR", bypassed: false },
+  { id: "instrument", type: "instrument", label: "Guitar / Pickups", bypassed: false },
+  { id: "wireless", type: "wireless", label: "Wireless System", bypassed: false },
+  { id: "tuner", type: "tuner", label: "Tuner", bypassed: false },
+  { id: "noise-gate", type: "noise_gate", label: "Noise Gate", bypassed: false },
+  { id: "overdrive", type: "overdrive", label: "Overdrive / Boost", bypassed: false },
+  { id: "eq", type: "eq", label: "Pedal EQ", bypassed: false },
   { id: "interface", type: "interface", label: "Audio Interface", bypassed: false },
 ];
+
+export const emptySignalBlocks: SignalBlock[] = [];
 
 function parseChain(row: SignalChainRow): SignalChain {
   let blocks = defaultSignalBlocks;

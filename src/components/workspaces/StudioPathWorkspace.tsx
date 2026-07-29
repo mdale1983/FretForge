@@ -5,6 +5,7 @@ import {
   closeStudioApplication,
   getFretForgeLinkState,
   launchStudioApplication,
+  listFretForgeLinkSources,
   listStudioApplications,
   type StudioApplication,
   type FretForgeLinkState,
@@ -30,6 +31,9 @@ export default function StudioPathWorkspace({ theme }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [link, setLink] = useState<FretForgeLinkState | null>(null);
+  const [linkSources, setLinkSources] = useState<FretForgeLinkState[]>([]);
+  const [selectedLinkId, setSelectedLinkId] = useState(() => localStorage.getItem("fretforge.selectedLinkSource") ?? "");
+  const [sourceNames, setSourceNames] = useState<Record<string, string>>(() => JSON.parse(localStorage.getItem("fretforge.linkSourceNames") ?? "{}"));
   const [scanning, setScanning] = useState(false);
 
   const loadApps = useCallback(async () => {
@@ -55,11 +59,38 @@ export default function StudioPathWorkspace({ theme }: Props) {
     return () => window.clearInterval(timer);
   }, [loadApps]);
   useEffect(() => {
-    const refresh = () => getFretForgeLinkState().then(setLink).catch(() => setLink(null));
+    const refresh = async () => {
+      try {
+        const sources = await listFretForgeLinkSources();
+        setLinkSources(sources);
+        const selected = sources.find((source) => source.instance_id === selectedLinkId) ?? sources[0];
+        if (selected && selected.instance_id !== selectedLinkId) {
+          setSelectedLinkId(selected.instance_id);
+          localStorage.setItem("fretforge.selectedLinkSource", selected.instance_id);
+        }
+        setLink(selected ?? await getFretForgeLinkState());
+      } catch { setLink(null); setLinkSources([]); }
+    };
     refresh();
     const timer = window.setInterval(refresh, 750);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [selectedLinkId]);
+
+  function selectLinkSource(id: string) {
+    setSelectedLinkId(id); localStorage.setItem("fretforge.selectedLinkSource", id);
+  }
+
+  function renameLinkSource(id: string, name: string) {
+    const next = { ...sourceNames, [id]: name };
+    setSourceNames(next); localStorage.setItem("fretforge.linkSourceNames", JSON.stringify(next));
+  }
+
+  function linkSourceLabel(source: FretForgeLinkState) {
+    if (sourceNames[source.instance_id]) return sourceNames[source.instance_id];
+    const matchingSources = linkSources.filter((candidate) => candidate.source_name === source.source_name);
+    if (matchingSources.length <= 1) return source.source_name;
+    return `${source.source_name} ${matchingSources.findIndex((candidate) => candidate.instance_id === source.instance_id) + 1}`;
+  }
 
   const preferred = useMemo(() => apps.find((app) => app.id === preferredId), [apps, preferredId]);
   const setupApp = apps.find((app) => app.id === setupAppId);
@@ -137,6 +168,10 @@ export default function StudioPathWorkspace({ theme }: Props) {
           <div><p className="font-semibold">FretForge Link</p><p className={`text-xs ${muted}`}>{link?.connected ? `Receiving audio from the DAW at ${Math.round(link.sample_rate / 1000)} kHz` : link?.installed ? "Installed — add FretForge Link to an armed guitar track" : "Not installed"}</p></div>
           <span className={`rounded-full px-3 py-1 text-xs ${link?.connected ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>{link?.connected ? "Connected" : link?.installed ? "Waiting for track" : "Install required"}</span>
         </div>
+        {linkSources.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-xs text-zinc-500">ANALYSIS SOURCE<select value={link?.instance_id ?? ""} onChange={(event) => selectLinkSource(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">{linkSources.map((source) => <option key={source.instance_id} value={source.instance_id}>{linkSourceLabel(source)}</option>)}</select></label>
+          {link && <label className="text-xs text-zinc-500">CUSTOM NAME (OPTIONAL)<input value={sourceNames[link.instance_id] ?? ""} placeholder={`Detected: ${link.source_name}`} onChange={(event) => renameLinkSource(link.instance_id, event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"/></label>}
+        </div>}
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800"><div className="h-full bg-orange-400 transition-[width] duration-100" style={{ width: `${Math.min(100, Math.max(0, (link?.input_peak ?? 0) * 100))}%` }}/></div>
       </div>
     </section>

@@ -33,13 +33,6 @@ tresult PLUGIN_API HelloWorldController::initialize (FUnknown* context)
 		                         Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsBypass,
 		                         HelloWorldParams::kBypassId);
 
-		parameters.addParameter (STR16 ("Parameter 1"), STR16 ("dB"), 0, .5,
-		                         Vst::ParameterInfo::kCanAutomate, HelloWorldParams::kParamVolId, 0,
-		                         STR16 ("Param1"));
-
-		parameters.addParameter (STR16 ("Parameter 2"), STR16 ("On/Off"), 1, 1.,
-		                         Vst::ParameterInfo::kCanAutomate, HelloWorldParams::kParamOnId, 0,
-		                         STR16 ("Param2"));
 	}
 
 	return result;
@@ -62,25 +55,13 @@ tresult PLUGIN_API HelloWorldController::setComponentState (IBStream* state)
 		return kResultFalse;
 
 	IBStreamer streamer (state, kLittleEndian);
-
-	float savedParam1 = 0.f;
-	if (streamer.readFloat (savedParam1) == false)
+	float legacyParam1 = 0.f;
+	int32 legacyParam2 = 0;
+	int32 bypassState = 0;
+	if (!streamer.readFloat (legacyParam1) || !streamer.readInt32 (legacyParam2) ||
+	    !streamer.readInt32 (bypassState))
 		return kResultFalse;
-	setParamNormalized (HelloWorldParams::kParamVolId, savedParam1);
-
-	int8 savedParam2 = 0;
-	if (streamer.readInt8 (savedParam2) == false)
-		return kResultFalse;
-	setParamNormalized (HelloWorldParams::kParamOnId, savedParam2);
-
-	// read the bypass
-	int32 bypassState;
-	if (streamer.readInt32 (bypassState) == false)
-		return kResultFalse;
-	setParamNormalized (kBypassId, bypassState ? 1 : 0);
-
-	return kResultOk;
-
+	setParamNormalized (HelloWorldParams::kBypassId, bypassState ? 1.0 : 0.0);
 	return kResultOk;
 }
 
@@ -106,6 +87,23 @@ IPlugView* PLUGIN_API HelloWorldController::createView (FIDString name)
 {
 	(void)name;
 	return nullptr;
+}
+
+tresult PLUGIN_API HelloWorldController::setChannelContextInfos (Vst::IAttributeList* list)
+{
+	if (!list)
+		return kResultFalse;
+	Vst::String128 channelName {};
+	if (list->getString (Vst::ChannelContext::kChannelNameKey, channelName,
+	                     sizeof (channelName)) != kResultTrue)
+		return kResultFalse;
+	if (auto message = owned (allocateMessage ()))
+	{
+		message->setMessageID ("FretForgeSourceName");
+		message->getAttributes ()->setString ("SourceName", channelName);
+		return sendMessage (message);
+	}
+	return kResultFalse;
 }
 
 //------------------------------------------------------------------------

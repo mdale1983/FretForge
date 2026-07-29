@@ -7,12 +7,16 @@
 
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "public.sdk/source/vst/utility/stringconvert.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <random>
+#include <sstream>
 
 using namespace Steinberg;
 
@@ -24,6 +28,7 @@ HelloWorldProcessor::HelloWorldProcessor ()
 {
 	//--- set the wanted controller for our processor
 	setControllerClass (kHelloWorldControllerUID);
+	mInstanceId = createInstanceId ();
 }
 
 //------------------------------------------------------------------------
@@ -92,16 +97,6 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
                 int32 numPoints = paramQueue->getPointCount ();
                 switch (paramQueue->getParameterId ())
                 {
-                    case HelloWorldParams::kParamVolId:
-                        if (paramQueue->getPoint (numPoints - 1, sampleOffset, value) ==
-                            kResultTrue)
-                            mParam1 = value;
-                        break;
-                    case HelloWorldParams::kParamOnId:
-                        if (paramQueue->getPoint (numPoints - 1, sampleOffset, value) ==
-                            kResultTrue)
-                            mParam2 = value > 0 ? 1 : 0;
-                        break;
                     case HelloWorldParams::kBypassId:
                         if (paramQueue->getPoint (numPoints - 1, sampleOffset, value) ==
                             kResultTrue)
@@ -206,6 +201,34 @@ tresult PLUGIN_API HelloWorldProcessor::canProcessSampleSize (int32 symbolicSamp
 	return kResultFalse;
 }
 
+tresult PLUGIN_API HelloWorldProcessor::notify (Vst::IMessage* message)
+{
+	if (!message || !message->getMessageID () ||
+	    std::strcmp (message->getMessageID (), "FretForgeSourceName") != 0)
+		return AudioEffect::notify (message);
+	Vst::String128 sourceName {};
+	if (!message->getAttributes () ||
+	    message->getAttributes ()->getString ("SourceName", sourceName, sizeof (sourceName)) != kResultTrue)
+		return kResultFalse;
+	auto converted = Vst::StringConvert::convert (sourceName);
+	if (!converted.empty ())
+	{
+		std::lock_guard<std::mutex> lock (mSourceNameMutex);
+		mSourceName = converted;
+	}
+	return kResultTrue;
+}
+
+std::string HelloWorldProcessor::createInstanceId ()
+{
+	std::random_device randomDevice;
+	std::mt19937_64 generator (randomDevice ());
+	std::uniform_int_distribution<uint64_t> distribution;
+	std::ostringstream value;
+	value << std::hex << std::setfill ('0') << std::setw (16) << distribution (generator);
+	return value.str ();
+}
+
 void HelloWorldProcessor::startTelemetry ()
 {
 	if (mTelemetryRunning.exchange (true))
@@ -272,12 +295,21 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 	std::filesystem::path directory = std::filesystem::path (localAppData) / "FretForge";
 	std::error_code error;
 	std::filesystem::create_directories (directory, error);
-	std::ofstream output (directory / "fretforge-link.json", std::ios::trunc);
+	std::ofstream output (directory / ("fretforge-link-" + mInstanceId + ".json"), std::ios::trunc);
 	if (!output)
 		return;
 	const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds> (
 		std::chrono::system_clock::now ().time_since_epoch ()).count ();
+	std::string sourceName;
+	{
+		std::lock_guard<std::mutex> lock (mSourceNameMutex);
+		sourceName = mSourceName;
+	}
+	for (size_t position = 0; (position = sourceName.find ('\"', position)) != std::string::npos; position += 2)
+		sourceName.replace (position, 1, "\\\"");
 	output << "{\"connected\":" << (connected ? "true" : "false")
+		<< ",\"instance_id\":\"" << mInstanceId << "\""
+		<< ",\"source_name\":\"" << sourceName << "\""
 		<< ",\"timestamp_ms\":" << timestamp
 		<< ",\"sample_rate\":" << mSampleRate.load (std::memory_order_relaxed)
 		<< ",\"input_rms\":" << mInputRms.load (std::memory_order_relaxed)
@@ -298,21 +330,25 @@ tresult PLUGIN_API HelloWorldProcessor::setState (IBStream* state)
 
 	IBStreamer streamer (state, kLittleEndian);
 
-	float savedParam1 = 0.f;
-	if (streamer.readFloat (savedParam1) == false)
+	float legacyParam1 = 0.f;
+	if (streamer.readFloat (legacyParam1) == false)
 		return kResultFalse;
 
-	int32 savedParam2 = 0;
-	if (streamer.readInt32 (savedParam2) == false)
+	int32 legacyParam2 = 0;
+	if (streamer.readInt32 (legacyParam2) == false)
 		return kResultFalse;
 
 	int32 savedBypass = 0;
 	if (streamer.readInt32 (savedBypass) == false)
 		return kResultFalse;
 
-	mParam1 = savedParam1;
-	mParam2 = savedParam2 > 0 ? 1 : 0;
 	mBypass = savedBypass > 0;
+	int32 idLength = 0;
+	if (streamer.readInt32 (idLength) && idLength > 0 && idLength <= 64)
+	{
+		std::string savedId (static_cast<size_t> (idLength), '\0');
+		if (streamer.readRaw (savedId.data (), idLength)) mInstanceId = savedId;
+	}
 
 	return kResultOk;
 }
@@ -322,14 +358,14 @@ tresult PLUGIN_API HelloWorldProcessor::getState (IBStream* state)
 {
 	// here we need to save the model (preset or project)
 
-	float toSaveParam1 = mParam1;
-	int32 toSaveParam2 = mParam2;
 	int32 toSaveBypass = mBypass ? 1 : 0;
 
 	IBStreamer streamer (state, kLittleEndian);
-	streamer.writeFloat (toSaveParam1);
-	streamer.writeInt32 (toSaveParam2);
+	streamer.writeFloat (0.f);
+	streamer.writeInt32 (0);
 	streamer.writeInt32 (toSaveBypass);
+	streamer.writeInt32 (static_cast<int32> (mInstanceId.size ()));
+	streamer.writeRaw (mInstanceId.data (), static_cast<int32> (mInstanceId.size ())); 
 
 	return kResultOk;
 }

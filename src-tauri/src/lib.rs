@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -87,12 +87,21 @@ struct FretForgeLinkTelemetry {
     frequency: f64,
     #[serde(default)]
     clarity: f64,
+    #[serde(default = "legacy_link_id")]
+    instance_id: String,
+    #[serde(default = "default_link_source_name")]
+    source_name: String,
 }
 
-static FRET_FORGE_LINK_CACHE: OnceLock<Mutex<Option<FretForgeLinkTelemetry>>> = OnceLock::new();
+fn legacy_link_id() -> String { "legacy".to_string() }
+fn default_link_source_name() -> String { "FretForge Link".to_string() }
+
+static FRET_FORGE_LINK_CACHE: OnceLock<Mutex<HashMap<String, FretForgeLinkTelemetry>>> = OnceLock::new();
 
 #[derive(Serialize)]
 struct FretForgeLinkState {
+    instance_id: String,
+    source_name: String,
     connected: bool,
     installed: bool,
     sample_rate: f64,
@@ -113,6 +122,52 @@ struct StudioApplicationDefinition {
     integration: &'static str,
     download_url: &'static str,
 }
+
+#[derive(Serialize)]
+struct AmpSimulatorInfo {
+    id: String,
+    name: String,
+    installed: bool,
+    standalone_path: Option<String>,
+    plugin_paths: Vec<String>,
+    recommended_role: String,
+    download_url: String,
+}
+
+struct AmpSimulatorDefinition {
+    id: &'static str,
+    name: &'static str,
+    standalone_paths: &'static [&'static str],
+    plugin_tokens: &'static [&'static str],
+    recommended_role: &'static str,
+    download_url: &'static str,
+}
+
+const AMP_SIMULATORS: &[AmpSimulatorDefinition] = &[
+    AmpSimulatorDefinition { id: "amplitube", name: "AmpliTube 5",
+        standalone_paths: &["IK Multimedia\\AmpliTube 5\\AmpliTube 5.exe"],
+        plugin_tokens: &["amplitube 5"], recommended_role: "Full amp, cabinet, and effects rig",
+        download_url: "https://www.ikmultimedia.com/products/amplitube5/" },
+    AmpSimulatorDefinition { id: "tonex", name: "TONEX",
+        standalone_paths: &["IK Multimedia\\TONEX\\TONEX.exe"], plugin_tokens: &["tonex"],
+        recommended_role: "Captured amps, cabinets, and drive tones",
+        download_url: "https://www.ikmultimedia.com/products/tonex/" },
+    AmpSimulatorDefinition { id: "guitar-rig", name: "Guitar Rig 7",
+        standalone_paths: &["Native Instruments\\Guitar Rig 7\\Guitar Rig 7.exe"],
+        plugin_tokens: &["guitar rig 7"], recommended_role: "Modular amps and creative effects",
+        download_url: "https://www.native-instruments.com/products/komplete/guitar/guitar-rig-7-pro/" },
+    AmpSimulatorDefinition { id: "neural-dsp", name: "Neural DSP Plug-ins",
+        standalone_paths: &[], plugin_tokens: &["archetype", "fortin", "soldano", "mesa boogie", "morgan amps", "tone king"],
+        recommended_role: "Artist and amplifier-specific guitar suites",
+        download_url: "https://neuraldsp.com/plugins" },
+    AmpSimulatorDefinition { id: "helix-native", name: "Helix Native",
+        standalone_paths: &[], plugin_tokens: &["helix native"], recommended_role: "Helix amp and effects ecosystem",
+        download_url: "https://line6.com/helix/helixnative.html" },
+    AmpSimulatorDefinition { id: "bias-fx", name: "BIAS FX 2",
+        standalone_paths: &["PositiveGrid\\BIAS FX 2\\BIAS FX 2.exe"], plugin_tokens: &["bias fx 2"],
+        recommended_role: "Amp, pedalboard, and effects environment",
+        download_url: "https://www.positivegrid.com/products/bias-fx-2" },
+];
 
 const STUDIO_APPLICATIONS: &[StudioApplicationDefinition] = &[
     StudioApplicationDefinition {
@@ -902,6 +957,56 @@ fn studio_application_is_running(system: &System, definition: &StudioApplication
     })
 }
 
+fn collect_audio_plugins(directory: &Path, depth: usize, plugins: &mut Vec<PathBuf>) {
+    if depth == 0 { return; }
+    let Ok(entries) = std::fs::read_dir(directory) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+        if extension.eq_ignore_ascii_case("vst3") || extension.eq_ignore_ascii_case("dll") {
+            plugins.push(path);
+        } else if path.is_dir() {
+            collect_audio_plugins(&path, depth - 1, plugins);
+        }
+    }
+}
+
+#[tauri::command]
+fn list_amp_simulators() -> Vec<AmpSimulatorInfo> {
+    let plugin_roots = [
+        std::env::var_os("CommonProgramFiles").map(PathBuf::from).map(|root| root.join("VST3")),
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).map(|root| root.join("Programs\\Common\\VST3")),
+        std::env::var_os("ProgramFiles").map(PathBuf::from).map(|root| root.join("Steinberg\\VstPlugins")),
+        std::env::var_os("ProgramFiles(x86)").map(PathBuf::from).map(|root| root.join("Steinberg\\VstPlugins")),
+    ];
+    let mut audio_plugins = Vec::new();
+    for root in plugin_roots.into_iter().flatten() {
+        collect_audio_plugins(&root, 5, &mut audio_plugins);
+    }
+    let application_roots = [
+        std::env::var_os("ProgramFiles").map(PathBuf::from),
+        std::env::var_os("ProgramFiles(x86)").map(PathBuf::from),
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).map(|root| root.join("Programs")),
+    ];
+
+    AMP_SIMULATORS.iter().map(|definition| {
+        let standalone_path = application_roots.iter().flatten().find_map(|root| {
+            definition.standalone_paths.iter().map(|relative| root.join(relative)).find(|path| path.is_file())
+        });
+        let plugin_paths = audio_plugins.iter().filter(|path| {
+            let name = path.file_stem().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
+            definition.plugin_tokens.iter().any(|token| name.contains(token))
+        }).map(|path| path.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        AmpSimulatorInfo {
+            id: definition.id.to_string(), name: definition.name.to_string(),
+            installed: standalone_path.is_some() || !plugin_paths.is_empty(),
+            standalone_path: standalone_path.map(|path| path.to_string_lossy().into_owned()),
+            plugin_paths, recommended_role: definition.recommended_role.to_string(),
+            download_url: definition.download_url.to_string(),
+        }
+    }).collect()
+}
+
 #[tauri::command]
 fn list_studio_applications() -> Vec<StudioApplicationInfo> {
     let system = System::new_all();
@@ -941,35 +1046,71 @@ fn close_studio_application(id: String) -> Result<bool, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().eq_ignore_ascii_case("true"))
 }
 
-#[tauri::command]
-fn get_fretforge_link_state() -> FretForgeLinkState {
-    let installed = [
+fn fretforge_link_is_installed() -> bool {
+    [
         std::env::var_os("ProgramFiles").map(PathBuf::from)
             .map(|root| root.join("Common Files\\VST3\\FretForgeLink.vst3")),
         std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
             .map(|root| root.join("Programs\\Common\\VST3\\FretForgeLink.vst3")),
-    ].into_iter().flatten().any(|path| path.exists());
-    let telemetry_read = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
-        .map(|root| root.join("FretForge\\fretforge-link.json"))
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|contents| serde_json::from_str::<FretForgeLinkTelemetry>(&contents).ok());
-    let cache = FRET_FORGE_LINK_CACHE.get_or_init(|| Mutex::new(None));
-    let telemetry = cache.lock().ok().and_then(|mut cached| {
-        if let Some(value) = telemetry_read { *cached = Some(value); }
-        cached.clone()
-    });
-    let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-    match telemetry {
-        Some(value) => FretForgeLinkState {
-            connected: value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500,
-            installed, sample_rate: value.sample_rate, input_rms: value.input_rms,
-            input_peak: value.input_peak, plugin_version: value.plugin_version,
-            frequency: value.frequency, clarity: value.clarity,
-        },
-        None => FretForgeLinkState { connected: false, installed, sample_rate: 0.0,
-            input_rms: 0.0, input_peak: 0.0, plugin_version: String::new(),
-            frequency: 0.0, clarity: 0.0 },
+    ].into_iter().flatten().any(|path| path.exists())
+}
+
+fn refresh_fretforge_link_cache() -> Vec<FretForgeLinkTelemetry> {
+    let cache = FRET_FORGE_LINK_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(directory) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+        .map(|root| root.join("FretForge")) {
+        let mut paths = std::fs::read_dir(&directory).ok().into_iter().flatten()
+            .filter_map(Result::ok).map(|entry| entry.path())
+            .filter(|path| path.file_name().and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("fretforge-link-") && name.ends_with(".json")))
+            .collect::<Vec<_>>();
+        let legacy = directory.join("fretforge-link.json");
+        if legacy.is_file() { paths.push(legacy); }
+        if let Ok(mut cached) = cache.lock() {
+            for path in paths {
+                if let Some(value) = std::fs::read_to_string(path).ok()
+                    .and_then(|contents| serde_json::from_str::<FretForgeLinkTelemetry>(&contents).ok()) {
+                    cached.insert(value.instance_id.clone(), value);
+                }
+            }
+        }
     }
+    cache.lock().map(|cached| cached.values().cloned().collect()).unwrap_or_default()
+}
+
+fn link_state(value: FretForgeLinkTelemetry, now_ms: u64) -> FretForgeLinkState {
+    FretForgeLinkState {
+        instance_id: value.instance_id, source_name: value.source_name,
+        connected: value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500,
+        installed: fretforge_link_is_installed(), sample_rate: value.sample_rate,
+        input_rms: value.input_rms, input_peak: value.input_peak,
+        plugin_version: value.plugin_version, frequency: value.frequency, clarity: value.clarity,
+    }
+}
+
+fn empty_link_state() -> FretForgeLinkState {
+    FretForgeLinkState { instance_id: String::new(), source_name: "FretForge Link".to_string(),
+        connected: false, installed: fretforge_link_is_installed(), sample_rate: 0.0,
+        input_rms: 0.0, input_peak: 0.0, plugin_version: String::new(),
+        frequency: 0.0, clarity: 0.0 }
+}
+
+#[tauri::command]
+fn list_fretforge_link_sources() -> Vec<FretForgeLinkState> {
+    let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let mut sources = refresh_fretforge_link_cache().into_iter()
+        .map(|value| link_state(value, now_ms)).filter(|source| source.connected).collect::<Vec<_>>();
+    sources.sort_by(|left, right| left.instance_id.cmp(&right.instance_id));
+    sources
+}
+
+#[tauri::command]
+fn get_fretforge_link_state(source_id: Option<String>) -> FretForgeLinkState {
+    let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let sources = refresh_fretforge_link_cache();
+    sources.into_iter().find(|value| source_id.as_ref().is_some_and(|id| id == &value.instance_id))
+        .or_else(|| refresh_fretforge_link_cache().into_iter().find(|value| value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500))
+        .map(|value| link_state(value, now_ms)).unwrap_or_else(empty_link_state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -989,8 +1130,10 @@ pub fn run() {
             get_native_tuner_state,
             push_audio_samples,
             list_studio_applications,
+            list_amp_simulators,
             launch_studio_application,
             close_studio_application,
+            list_fretforge_link_sources,
             get_fretforge_link_state
         ])
         .run(tauri::generate_context!())
