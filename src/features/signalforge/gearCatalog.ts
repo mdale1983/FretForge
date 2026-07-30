@@ -11,10 +11,11 @@ export type GearCatalogItem = {
   ports?: GearPort[];
   pickupCount?: 1 | 2 | 3;
   pickupLabels?: string[];
+  custom?: boolean;
 };
 
 export type GearPort = {
-  id: "input" | "output" | "guitar_in" | "guitar_out" | "dec_in" | "dec_out" | "send" | "return";
+  id: "input" | "output" | "input_2" | "output_2" | "guitar_in" | "guitar_out" | "dec_in" | "dec_out" | "send" | "return";
   label: string;
   side: "left" | "right";
   offset: number;
@@ -137,9 +138,29 @@ export function catalogLabel(item: GearCatalogItem) {
   return `${item.manufacturer} ${item.model}`;
 }
 
+const customGearStorageKey = "fretforge.customGearCatalog";
+
+export function getCustomGearCatalog(): GearCatalogItem[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(customGearStorageKey) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getGearCatalog() {
+  return [...gearCatalog, ...getCustomGearCatalog()];
+}
+
+export function addCustomGear(item: GearCatalogItem) {
+  const existing = getCustomGearCatalog().filter((gear) => gear.id !== item.id);
+  localStorage.setItem(customGearStorageKey, JSON.stringify([...existing, { ...item, custom: true }]));
+}
+
 export function findCatalogItem(label: string, type?: SignalBlockType) {
   const normalized = label.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return gearCatalog.find((item) => {
+  return getGearCatalog().find((item) => {
     if (type && item.type !== type) return false;
     const model = item.model.toLowerCase().replace(/[^a-z0-9]/g, "");
     const fullName = catalogLabel(item).toLowerCase().replace(/[^a-z0-9]/g, "");

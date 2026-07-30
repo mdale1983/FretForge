@@ -27,7 +27,8 @@ import {
 import { getFretForgeLinkState, type FretForgeLinkState } from "../../services/studioApplicationService";
 import { listAmpSimulators, type AmpSimulator } from "../../services/signalApplicationService";
 import GearDeviceVisual from "../../features/signalforge/GearDeviceVisual";
-import { activePickupModels, catalogLabel, findCatalogItem, gearCatalog } from "../../features/signalforge/gearCatalog";
+import { activePickupModels, addCustomGear, catalogLabel, findCatalogItem, gearCatalog, getGearCatalog, type GearCatalogItem } from "../../features/signalforge/gearCatalog";
+import { buildRoutingSteps, routingStepKey, validateSignalChain, type RoutingStep } from "../../features/signalforge/signalRoutingService";
 
 type SignalForgeWorkspaceProps = { theme: string };
 
@@ -64,65 +65,86 @@ function newBlock(type: SignalBlockType): SignalBlock {
   };
 }
 
-type RoutingStep = {
-  from: SignalBlock;
-  fromPort: string;
-  to: SignalBlock;
-  toPort: string;
-  reason?: string;
-};
+function GearModelPicker({ block, inputClass, onSelect }: { block: SignalBlock; inputClass: string; onSelect: (catalogId: string) => void }) {
+  const [search, setSearch] = useState("");
+  const [manufacturer, setManufacturer] = useState("all");
+  const [showCustom, setShowCustom] = useState(false);
+  const [customManufacturer, setCustomManufacturer] = useState("");
+  const [customModel, setCustomModel] = useState("");
+  const [customProfile, setCustomProfile] = useState<"serial" | "stereo" | "detector_loop" | "send_return_loop">("serial");
+  const [customCreatesNoise, setCustomCreatesNoise] = useState(false);
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  const allItems = getGearCatalog().filter((item) => item.type === block.type);
+  const manufacturers = [...new Set(allItems.map((item) => item.manufacturer))].sort();
+  const query = search.trim().toLowerCase();
+  const filtered = allItems.filter((item) =>
+    (manufacturer === "all" || item.manufacturer === manufacturer) &&
+    (!query || catalogLabel(item).toLowerCase().includes(query))
+  );
+  const recentIds = (() => { try { return JSON.parse(localStorage.getItem("fretforge.recentGear") ?? "[]") as string[]; } catch { return []; } })();
+  const recent = recentIds.map((id) => allItems.find((item) => item.id === id)).filter((item): item is GearCatalogItem => Boolean(item)).slice(0, 3);
+  void catalogVersion;
 
-function buildRoutingSteps(blocks: SignalBlock[]): RoutingStep[] {
-  const activeBlocks = blocks.filter((block) => !block.bypassed);
-  const gateIndex = activeBlocks.findIndex((block) => {
-    const profile = findCatalogItem(block.label, block.type)?.routingProfile;
-    return profile === "detector_loop" || profile === "send_return_loop";
-  });
-  const gateProfile = gateIndex >= 0
-    ? findCatalogItem(activeBlocks[gateIndex].label, activeBlocks[gateIndex].type)?.routingProfile
-    : undefined;
-  const gainTypes: SignalBlockType[] = ["overdrive", "distortion", "amp"];
-  const isNoiseSource = (block: SignalBlock) => Boolean(findCatalogItem(block.label, block.type)?.createsNoise || gainTypes.includes(block.type));
-
-  if (gateIndex < 0) {
-    return activeBlocks.slice(0, -1).map((block, index) => ({
-      from: block,
-      fromPort: "OUTPUT",
-      to: activeBlocks[index + 1],
-      toPort: "INPUT",
-    }));
+  function select(item: GearCatalogItem) {
+    onSelect(item.id);
+    const nextRecent = [item.id, ...recentIds.filter((id) => id !== item.id)].slice(0, 8);
+    localStorage.setItem("fretforge.recentGear", JSON.stringify(nextRecent));
   }
 
-  const gate = activeBlocks[gateIndex];
-  const noiseSources = activeBlocks.filter((block) => block.id !== gate.id && isNoiseSource(block));
-  if (noiseSources.length === 0) {
-    return activeBlocks.slice(0, -1).map((block, index) => ({ from: block, fromPort: "OUTPUT", to: activeBlocks[index + 1], toPort: "INPUT" }));
+  function createCustom() {
+    if (!customManufacturer.trim() || !customModel.trim()) return;
+    const slug = `${customManufacturer}-${customModel}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const ports = customProfile === "detector_loop"
+      ? [
+          { id: "guitar_in" as const, label: "G IN", side: "right" as const, offset: .14 },
+          { id: "guitar_out" as const, label: "G OUT", side: "right" as const, offset: .28 },
+          { id: "dec_in" as const, label: "DEC IN", side: "right" as const, offset: .42 },
+          { id: "dec_out" as const, label: "DEC OUT", side: "left" as const, offset: .28 },
+        ]
+      : customProfile === "send_return_loop"
+        ? [
+            { id: "input" as const, label: "IN", side: "right" as const, offset: .18 },
+            { id: "return" as const, label: "RETURN", side: "right" as const, offset: .38 },
+            { id: "output" as const, label: "OUT", side: "left" as const, offset: .18 },
+            { id: "send" as const, label: "SEND", side: "left" as const, offset: .38 },
+          ]
+        : customProfile === "stereo"
+          ? [
+              { id: "input" as const, label: "IN L", side: "right" as const, offset: .18 },
+              { id: "input_2" as const, label: "IN R", side: "right" as const, offset: .38 },
+              { id: "output" as const, label: "OUT L", side: "left" as const, offset: .18 },
+              { id: "output_2" as const, label: "OUT R", side: "left" as const, offset: .38 },
+            ]
+          : [
+            { id: "input" as const, label: "IN", side: "right" as const, offset: .28 },
+            { id: "output" as const, label: "OUT", side: "left" as const, offset: .28 },
+          ];
+    const item: GearCatalogItem = { id: `custom-${slug}-${Date.now()}`, manufacturer: customManufacturer.trim(), model: customModel.trim(), type: block.type, color: "#3f3f46", routingProfile: customProfile === "stereo" ? "serial" : customProfile, ports, createsNoise: customCreatesNoise, custom: true };
+    addCustomGear(item);
+    setCatalogVersion((version) => version + 1);
+    select(item);
+    setShowCustom(false);
+    setCustomManufacturer("");
+    setCustomModel("");
   }
-  const cleanBeforeGate = activeBlocks.slice(0, gateIndex).filter((block) => !isNoiseSource(block));
-  const cleanAfterCandidates = activeBlocks.slice(gateIndex + 1).filter((block) => !isNoiseSource(block));
-  const cleanAfterGate = [
-    ...cleanAfterCandidates.filter((block) => block.type !== "interface" && block.type !== "daw"),
-    ...cleanAfterCandidates.filter((block) => block.type === "interface" || block.type === "daw"),
-  ];
-  const steps: RoutingStep[] = [];
-  for (let index = 0; index < cleanBeforeGate.length - 1; index += 1) {
-    steps.push({ from: cleanBeforeGate[index], fromPort: "OUTPUT", to: cleanBeforeGate[index + 1], toPort: "INPUT" });
-  }
-  if (cleanBeforeGate.length > 0) {
-    steps.push({ from: cleanBeforeGate[cleanBeforeGate.length - 1], fromPort: "OUTPUT", to: gate, toPort: gateProfile === "send_return_loop" ? "INPUT" : "GUITAR IN" });
-  }
-  steps.push({ from: gate, fromPort: gateProfile === "send_return_loop" ? "SEND" : "GUITAR OUT", to: noiseSources[0], toPort: "INPUT" });
-  for (let index = 0; index < noiseSources.length - 1; index += 1) {
-    steps.push({ from: noiseSources[index], fromPort: "OUTPUT", to: noiseSources[index + 1], toPort: "INPUT" });
-  }
-  steps.push({ from: noiseSources[noiseSources.length - 1], fromPort: "OUTPUT", to: gate, toPort: gateProfile === "send_return_loop" ? "RETURN" : "DEC IN" });
-  if (cleanAfterGate.length > 0) {
-    steps.push({ from: gate, fromPort: gateProfile === "send_return_loop" ? "OUTPUT" : "DEC OUT", to: cleanAfterGate[0], toPort: "INPUT" });
-    for (let index = 0; index < cleanAfterGate.length - 1; index += 1) {
-      steps.push({ from: cleanAfterGate[index], fromPort: "OUTPUT", to: cleanAfterGate[index + 1], toPort: "INPUT" });
-    }
-  }
-  return steps;
+
+  return <div className="min-w-0">
+    <div className="grid gap-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(8rem,.7fr)]">
+      <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Search Models<input value={search} onChange={(event) => setSearch(event.target.value)} className={inputClass} placeholder="Manufacturer or model" /></label>
+      <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Manufacturer<select value={manufacturer} onChange={(event) => setManufacturer(event.target.value)} className={inputClass}><option value="all">All manufacturers</option>{manufacturers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+    </div>
+    {recent.length > 0 && !search && manufacturer === "all" && <div className="mt-2 flex flex-wrap items-center gap-1"><span className="mr-1 text-[10px] uppercase tracking-wide text-zinc-500">Recent</span>{recent.map((item) => <button key={item.id} type="button" onClick={() => select(item)} className="rounded-full border border-zinc-700 px-2 py-1 text-xs hover:border-orange-500">{item.model}</button>)}</div>}
+    <div className="mt-2 flex gap-2">
+      <select value={findCatalogItem(block.label, block.type)?.id ?? ""} onChange={(event) => { const item = allItems.find((candidate) => candidate.id === event.target.value); if (item) select(item); }} className={`${inputClass} min-w-0 flex-1`} aria-label={`${block.type} device model`}><option value="" disabled>{filtered.length ? "Select a device" : "No matching gear"}</option>{filtered.map((item) => <option key={item.id} value={item.id}>{catalogLabel(item)}{item.custom ? " (Custom)" : ""}</option>)}</select>
+      <button type="button" onClick={() => setShowCustom((visible) => !visible)} className="shrink-0 rounded-lg border border-orange-500 px-3 py-2 text-xs text-orange-400"><Plus size={14} className="inline" /> Custom</button>
+    </div>
+    {showCustom && <div className="mt-3 grid gap-2 border-t border-zinc-700/60 pt-3 sm:grid-cols-3">
+      <input value={customManufacturer} onChange={(event) => setCustomManufacturer(event.target.value)} className={inputClass} placeholder="Manufacturer" aria-label="Custom manufacturer" />
+      <input value={customModel} onChange={(event) => setCustomModel(event.target.value)} className={inputClass} placeholder="Model" aria-label="Custom model" />
+      <select value={customProfile} onChange={(event) => setCustomProfile(event.target.value as typeof customProfile)} className={inputClass} aria-label="Custom jack layout"><option value="serial">Standard IN / OUT</option><option value="stereo">Stereo Dual IN / OUT</option><option value="detector_loop">4-Jack Detector Loop</option><option value="send_return_loop">Send / Return Loop</option></select>
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-3"><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={customCreatesNoise} onChange={(event) => setCustomCreatesNoise(event.target.checked)} /> Adds gain or noise</label><button type="button" onClick={createCustom} disabled={!customManufacturer.trim() || !customModel.trim()} className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Add Custom Gear</button><button type="button" onClick={() => setShowCustom(false)} className="rounded-lg border border-zinc-600 px-3 py-2 text-xs">Cancel</button></div>
+    </div>}
+  </div>;
 }
 
 function GuitarEndpointVisual({ pickupCount, pickupLabels }: { pickupCount: 1 | 2 | 3; pickupLabels: string[] }) {
@@ -137,7 +159,7 @@ function GuitarEndpointVisual({ pickupCount, pickupLabels }: { pickupCount: 1 | 
   </div>;
 }
 
-function PedalboardRoutingDiagram({ blocks, steps, onToggleBypass }: { blocks: SignalBlock[]; steps: RoutingStep[]; onToggleBypass: (blockId: string) => void }) {
+function PedalboardRoutingDiagram({ blocks, steps, highlightedStepKey, onToggleBypass }: { blocks: SignalBlock[]; steps: RoutingStep[]; highlightedStepKey?: string; onToggleBypass: (blockId: string) => void }) {
   const cardWidth = 86;
   const cardHeight = 180;
   const instrumentWidth = 148;
@@ -296,9 +318,10 @@ function PedalboardRoutingDiagram({ blocks, steps, onToggleBypass }: { blocks: S
                   : step.fromPort === "GUITAR OUT"
                     ? "#38bdf8"
                     : "#fbbf24";
+              const highlighted = routingStepKey(step) === highlightedStepKey;
               return <g key={`${step.from.id}-${step.fromPort}-${step.to.id}-${step.toPort}`}>
-                <path d={path} fill="none" stroke="#09090b" strokeWidth="6" strokeLinecap="round" opacity=".75" />
-                <path d={path} fill="none" stroke={cableColor} strokeWidth="2.5" strokeLinecap="round" />
+                <path d={path} fill="none" stroke={highlighted ? "#fff7ed" : "#09090b"} strokeWidth={highlighted ? "10" : "6"} strokeLinecap="round" opacity={highlighted ? ".95" : ".75"} />
+                <path d={path} fill="none" stroke={cableColor} strokeWidth={highlighted ? "5" : "2.5"} strokeLinecap="round" className={highlighted ? "drop-shadow-[0_0_5px_rgba(251,146,60,.95)]" : ""} />
               </g>;
             })}
           </svg>
@@ -332,6 +355,9 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
   const [preferredAmpId, setPreferredAmpId] = useState(() => localStorage.getItem("fretforge.preferredAmpSimulator") ?? "amplitube");
   const [showRigGuide, setShowRigGuide] = useState(false);
   const [linkState, setLinkState] = useState<FretForgeLinkState | null>(null);
+  const [completedCableKeys, setCompletedCableKeys] = useState<string[]>([]);
+  const [highlightedCableKey, setHighlightedCableKey] = useState<string>();
+  const [setupConfirmed, setSetupConfirmed] = useState(false);
   const selectedChain = chains.find((chain) => chain.id === selectedId);
   const isDirty = selectedChain
     ? selectedChain.name !== name ||
@@ -433,7 +459,7 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
   }
 
   function selectCatalogGear(block: SignalBlock, catalogId: string) {
-    const item = gearCatalog.find((candidate) => candidate.id === catalogId);
+    const item = getGearCatalog().find((candidate) => candidate.id === catalogId);
     if (item) updateBlock(block.id, { type: item.type, label: catalogLabel(item) });
   }
 
@@ -496,6 +522,61 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
       ? Boolean(block.pickupCount && block.pickupTechnology && (block.pickupTechnology === "passive" || block.pickupModel))
       : Boolean(findCatalogItem(block.label, block.type)));
   const routingSteps = buildRoutingSteps(blocks);
+  const chainIssues = validateSignalChain(blocks);
+  const chainErrors = chainIssues.filter((issue) => issue.severity === "error");
+  const routingSignature = routingSteps.map(routingStepKey).join("|");
+  const completedCableCount = routingSteps.filter((step) => completedCableKeys.includes(routingStepKey(step))).length;
+  const setupProgress = routingSteps.length === 0 ? 0 : Math.round((completedCableCount / routingSteps.length) * 100);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setCompletedCableKeys([]);
+      setHighlightedCableKey(undefined);
+      setSetupConfirmed(false);
+      return;
+    }
+    const validKeys = routingSignature ? routingSignature.split("|") : [];
+    try {
+      const saved = JSON.parse(localStorage.getItem(`fretforge.signalChainSetup.${selectedId}`) ?? "[]") as string[];
+      const restored = saved.filter((key) => validKeys.includes(key));
+      setCompletedCableKeys(restored);
+      setHighlightedCableKey(validKeys.find((key) => !restored.includes(key)) ?? validKeys[0]);
+      setSetupConfirmed(localStorage.getItem(`fretforge.signalChainSetupConfirmed.${selectedId}`) === routingSignature);
+    } catch {
+      setCompletedCableKeys([]);
+      setHighlightedCableKey(validKeys[0]);
+      setSetupConfirmed(false);
+    }
+  }, [selectedId, routingSignature]);
+
+  function toggleCableStep(step: RoutingStep) {
+    if (!selectedId) return;
+    const key = routingStepKey(step);
+    const next = completedCableKeys.includes(key)
+      ? completedCableKeys.filter((item) => item !== key)
+      : [...completedCableKeys, key];
+    setCompletedCableKeys(next);
+    setHighlightedCableKey(key);
+    setSetupConfirmed(false);
+    localStorage.setItem(`fretforge.signalChainSetup.${selectedId}`, JSON.stringify(next));
+    localStorage.removeItem(`fretforge.signalChainSetupConfirmed.${selectedId}`);
+  }
+
+  function confirmPhysicalSetup() {
+    if (!selectedId || setupProgress !== 100) return;
+    localStorage.setItem(`fretforge.signalChainSetupConfirmed.${selectedId}`, routingSignature);
+    setSetupConfirmed(true);
+    setHighlightedCableKey(undefined);
+  }
+
+  function resetPhysicalSetup() {
+    if (!selectedId) return;
+    localStorage.removeItem(`fretforge.signalChainSetup.${selectedId}`);
+    localStorage.removeItem(`fretforge.signalChainSetupConfirmed.${selectedId}`);
+    setCompletedCableKeys([]);
+    setSetupConfirmed(false);
+    setHighlightedCableKey(routingSteps[0] ? routingStepKey(routingSteps[0]) : undefined);
+  }
 
   return (
     <div className="space-y-5">
@@ -540,7 +621,44 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
               {(isBuildingNew || isEditing) && <button type="button" onClick={handleSave} className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white"><Save size={15} /> Save</button>}
             </div>}
 
-            {!isBuildingNew && !isEditing && hasCompletedSignalPath && <PedalboardRoutingDiagram blocks={blocks} steps={routingSteps} onToggleBypass={toggleBoardPedal} />}
+            {!isBuildingNew && !isEditing && hasCompletedSignalPath && <>
+              <PedalboardRoutingDiagram blocks={blocks} steps={routingSteps} highlightedStepKey={highlightedCableKey} onToggleBypass={toggleBoardPedal} />
+              <div className="mt-5 grid gap-5 border-t border-zinc-700/60 pt-5 lg:grid-cols-[.8fr_1.2fr]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    {chainIssues.length === 0
+                      ? <CheckCircle2 size={18} className="text-emerald-400" />
+                      : <AlertTriangle size={18} className={chainErrors.length > 0 ? "text-red-400" : "text-amber-400"} />}
+                    <h3 className="font-semibold">Rig Check</h3>
+                  </div>
+                  {chainIssues.length === 0
+                    ? <p className="mt-2 text-sm text-emerald-400">This physical route is ready to connect.</p>
+                    : <div className="mt-3 space-y-2">{chainIssues.map((issue) => <p key={issue.id} className={`text-sm ${issue.severity === "error" ? "text-red-400" : "text-amber-400"}`}>{issue.message}</p>)}</div>}
+                </div>
+                <div className="lg:border-l lg:border-zinc-700/60 lg:pl-5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="font-semibold">Wiring Checklist</h3>
+                    <span className="text-xs text-zinc-500">{completedCableCount} of {routingSteps.length} connected</span>
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${setupProgress}%` }} /></div>
+                  <ol className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {routingSteps.map((step, index) => { const key = routingStepKey(step); const complete = completedCableKeys.includes(key); const highlighted = highlightedCableKey === key; return <li key={key}>
+                      <button type="button" onClick={() => { setHighlightedCableKey(key); toggleCableStep(step); }} className={`flex w-full min-w-0 gap-2 rounded-lg border p-2 text-left text-sm transition ${highlighted ? "border-orange-400 bg-orange-500/10" : "border-transparent hover:border-zinc-700"}`}>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${complete ? "bg-emerald-400 text-zinc-950" : "bg-orange-500 text-white"}`}>{complete ? <CheckCircle2 size={14} /> : index + 1}</span>
+                      <span className={complete ? "min-w-0 text-zinc-500 line-through" : "min-w-0"}><strong>{step.from.label}</strong> <span className="text-orange-400">{step.fromPort}</span><span className="mx-1 text-zinc-500">to</span><strong>{step.to.label}</strong> <span className="text-emerald-400">{step.toPort}</span></span>
+                      </button>
+                    </li>; })}
+                  </ol>
+                  {routingSteps.length > 0 && <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <p className={`text-xs ${setupConfirmed || setupProgress === 100 ? "text-emerald-400" : "text-zinc-500"}`}>{setupConfirmed ? "Setup complete and saved for this signal chain." : setupProgress === 100 ? "All connections checked. Complete the setup to save this rig as ready." : "Select each connection as you install it; the matching cable is highlighted above."}</p>
+                    <div className="flex gap-2">
+                      {(completedCableCount > 0 || setupConfirmed) && <button type="button" onClick={resetPhysicalSetup} className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-300">Reset Setup</button>}
+                      {setupProgress === 100 && !setupConfirmed && <button type="button" onClick={confirmPhysicalSetup} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-zinc-950">Complete Setup</button>}
+                    </div>
+                  </div>}
+                </div>
+              </div>
+            </>}
 
             {(isBuildingNew || isEditing) && <>
 
@@ -557,7 +675,7 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
                     <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Pickup Count<select value={block.pickupCount ?? 2} onChange={(event) => updatePickupConfiguration(block, { pickupCount: Number(event.target.value) as 1 | 2 | 3 })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value={1}>1 Pickup</option><option value={2}>2 Pickups</option><option value={3}>3 Pickups</option></select></label>
                     <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Pickup Type<select value={block.pickupTechnology ?? "passive"} onChange={(event) => updatePickupConfiguration(block, { pickupTechnology: event.target.value as "active" | "passive", pickupModel: event.target.value === "active" ? block.pickupModel ?? activePickupModels[0] : undefined })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value="passive">Passive</option><option value="active">Active</option></select></label>
                     {block.pickupTechnology === "active" && <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500 sm:col-span-2 xl:col-span-1">Active Pickup Model<select value={block.pickupModel ?? activePickupModels[0]} onChange={(event) => updatePickupConfiguration(block, { pickupModel: event.target.value })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value={activePickupModels[0]}>{activePickupModels[0]}</option>{activePickupModels.slice(1).map((model) => <option key={model} value={model}>{model}</option>)}</select></label>}
-                  </div> : <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Device Model<select value={findCatalogItem(block.label, block.type)?.id ?? ""} onChange={(event) => selectCatalogGear(block, event.target.value)} className={inputClass} aria-label={`${block.type} device model`}><option value="" disabled>Select a device</option>{gearCatalog.filter((item) => item.type === block.type).map((item) => <option key={item.id} value={item.id}>{catalogLabel(item)}</option>)}</select></label>}
+                  </div> : <GearModelPicker block={block} inputClass={inputClass} onSelect={(catalogId) => selectCatalogGear(block, catalogId)} />}
                   <div className="flex gap-1">
                     <button type="button" onClick={() => setBlocks((current) => current.filter((item) => item.id !== block.id))} className="rounded p-2 text-red-400" aria-label="Remove block"><Trash2 size={15} /></button>
                   </div>

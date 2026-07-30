@@ -4,6 +4,7 @@ import {
   Session,
   SessionWorkspaceState,
 } from "../types/session";
+import type { SignalChain } from "../features/signalforge/signalChainService";
 
 export type { Session };
 
@@ -473,4 +474,30 @@ export async function switchToFallbackSessionBeforeDelete(
   }
 
   return recoverySession;
+}
+
+export async function assignSignalChainToSession(
+  sessionId: number,
+  signalChain: SignalChain | null,
+) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const snapshot = signalChain
+    ? JSON.stringify({
+        source_chain_id: signalChain.id,
+        name: signalChain.name,
+        blocks: signalChain.blocks,
+        notes: signalChain.notes,
+        captured_at: now,
+      })
+    : null;
+
+  await db.execute(
+    `
+    UPDATE sessions
+    SET signal_chain_id = ?, rig_snapshot_json = ?, updated_at = ?
+    WHERE id = ?
+    `,
+    [signalChain?.id ?? null, snapshot, now, sessionId]
+  );
 }

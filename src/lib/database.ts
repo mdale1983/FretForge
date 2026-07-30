@@ -71,6 +71,8 @@ export async function initializeDatabase() {
   );
   await addColumnIfMissing(database, "sessions", "notes", "TEXT");
   await addColumnIfMissing(database, "sessions", "completed_at", "TEXT");
+  await addColumnIfMissing(database, "sessions", "signal_chain_id", "INTEGER");
+  await addColumnIfMissing(database, "sessions", "rig_snapshot_json", "TEXT");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS forgepulse_runs (

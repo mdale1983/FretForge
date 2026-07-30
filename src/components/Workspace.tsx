@@ -227,6 +227,10 @@ function Workspace({
               <CurrentSessionCard
                 activeSession={activeSession}
                 theme={theme}
+                onSessionUpdated={async () => {
+                  await loadCurrentProject();
+                  await onWorkstationStatusRefresh();
+                }}
               />
             </>
           )}

@@ -12,8 +12,11 @@ import {
   setActiveSession,
   switchToFallbackSessionBeforeDelete,
   updateSessionNotes,
+  assignSignalChainToSession,
   type Session,
 } from "../services/SessionService";
+import { getSignalChains, type SignalChain } from "../features/signalforge/signalChainService";
+import { buildRoutingSteps, routingStepKey } from "../features/signalforge/signalRoutingService";
 
 type SessionPanelProps = {
   theme: string;
@@ -28,6 +31,7 @@ function SessionPanel({
 }: SessionPanelProps) {
   const sessionAction = useAsyncAction();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [signalChains, setSignalChains] = useState<SignalChain[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [isCompletedSessionsOpen, setIsCompletedSessionsOpen] = useState(false);
   const [completedSessions, setCompletedSessions] = useState<Session[]>([]);
@@ -68,11 +72,35 @@ function SessionPanel({
 
     if (!projectId) {
       setSessions([]);
+      setSignalChains([]);
       return;
     }
 
     const loadedSessions = await getSessionsForProject(projectId);
     setSessions(loadedSessions);
+    setSignalChains(await getSignalChains());
+  }
+
+  function isRigSetupComplete(chain: SignalChain) {
+    const signature = buildRoutingSteps(chain.blocks).map(routingStepKey).join("|");
+    return Boolean(signature) && localStorage.getItem(`fretforge.signalChainSetupConfirmed.${chain.id}`) === signature;
+  }
+
+  function snapshotName(session: Session) {
+    try {
+      return session.rig_snapshot_json ? (JSON.parse(session.rig_snapshot_json) as { name?: string }).name : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function handleAssignRig(sessionId: number, chainId: number | null) {
+    const chain = signalChains.find((item) => item.id === chainId) ?? null;
+    await sessionAction.run(async () => {
+      await assignSignalChainToSession(sessionId, chain);
+      await loadSessions();
+      await onWorkstationStatusRefresh();
+    }, "The active rig could not be saved to this session.");
   }
 
   async function loadCompletedSessions() {
@@ -392,6 +420,12 @@ function SessionPanel({
 
                   <div className="text-xs text-zinc-500">
                     {new Date(session.updated_at).toLocaleString()}
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-zinc-700/60 p-3" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex items-center justify-between gap-2"><label className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500" htmlFor={`session-rig-${session.id}`}>Active Rig</label>{session.signal_chain_id && <span className={`text-[10px] ${signalChains.find((chain) => chain.id === session.signal_chain_id && isRigSetupComplete(chain)) ? "text-emerald-400" : "text-amber-400"}`}>{signalChains.find((chain) => chain.id === session.signal_chain_id && isRigSetupComplete(chain)) ? "Setup ready" : "Setup needs review"}</span>}</div>
+                    <select id={`session-rig-${session.id}`} value={session.signal_chain_id ?? ""} onChange={(event) => handleAssignRig(session.id, event.target.value ? Number(event.target.value) : null)} className={`mt-2 w-full rounded-md border px-2 py-1.5 text-xs outline-none ${theme === "dark" ? "border-zinc-700 bg-zinc-950 text-zinc-100" : "border-zinc-300 bg-white text-zinc-900"}`}><option value="">No rig selected</option>{signalChains.map((chain) => <option key={chain.id} value={chain.id}>{chain.name}{isRigSetupComplete(chain) ? " · Ready" : " · Needs setup"}</option>)}</select>
+                    {session.rig_snapshot_json && <p className="mt-2 text-[10px] text-zinc-500">Session snapshot: {snapshotName(session) ?? "Saved rig"}</p>}
                   </div>
 
                   <div className="mt-3">

@@ -1,8 +1,13 @@
+import { useEffect, useState } from "react";
 import { Session } from "../../types/session";
+import { getSignalChains, type SignalChain } from "../../features/signalforge/signalChainService";
+import { buildRoutingSteps, routingStepKey } from "../../features/signalforge/signalRoutingService";
+import { assignSignalChainToSession } from "../../services/SessionService";
 
 type CurrentSessionCardProps = {
   activeSession: Session | null;
   theme: string;
+  onSessionUpdated?: () => Promise<void>;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -46,8 +51,28 @@ function DetailRow({
 export default function CurrentSessionCard({
   activeSession,
   theme,
+  onSessionUpdated,
 }: CurrentSessionCardProps) {
   const sessionNotes = activeSession?.notes?.trim();
+  const [signalChains, setSignalChains] = useState<SignalChain[]>([]);
+
+  useEffect(() => {
+    getSignalChains().then(setSignalChains).catch(() => setSignalChains([]));
+  }, [activeSession?.id]);
+
+  function isSetupReady(chain: SignalChain) {
+    const signature = buildRoutingSteps(chain.blocks).map(routingStepKey).join("|");
+    return Boolean(signature) && localStorage.getItem(`fretforge.signalChainSetupConfirmed.${chain.id}`) === signature;
+  }
+
+  const selectedRig = signalChains.find((chain) => chain.id === activeSession?.signal_chain_id);
+
+  async function selectRig(value: string) {
+    if (!activeSession) return;
+    const chain = signalChains.find((item) => item.id === Number(value)) ?? null;
+    await assignSignalChainToSession(activeSession.id, chain);
+    await onSessionUpdated?.();
+  }
 
   return (
     <div
@@ -93,6 +118,12 @@ export default function CurrentSessionCard({
             }`}
           >
             {sessionNotes || "No session notes yet."}
+          </div>
+
+          <div className={`mt-4 rounded-xl border p-3 ${theme === "dark" ? "border-orange-500/30 bg-orange-500/5" : "border-orange-300 bg-orange-50"}`}>
+            <div className="flex items-center justify-between gap-2"><label htmlFor="current-session-active-rig" className="text-[11px] font-semibold uppercase tracking-wide text-orange-400">Active Rig</label>{selectedRig && <span className={`text-[10px] ${isSetupReady(selectedRig) ? "text-emerald-400" : "text-amber-400"}`}>{isSetupReady(selectedRig) ? "Ready" : "Needs setup"}</span>}</div>
+            <select id="current-session-active-rig" value={activeSession.signal_chain_id ?? ""} onChange={(event) => selectRig(event.target.value)} className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 ${theme === "dark" ? "border-zinc-700 bg-zinc-950 text-zinc-100" : "border-zinc-300 bg-white text-zinc-900"}`}><option value="">Select a saved rig</option>{signalChains.map((chain) => <option key={chain.id} value={chain.id}>{chain.name}{isSetupReady(chain) ? " · Ready" : " · Needs setup"}</option>)}</select>
+            <p className="mt-2 text-[10px] text-zinc-500">Selecting a rig saves a snapshot to this practice session.</p>
           </div>
 
           <div className="mt-auto grid grid-cols-1 gap-3 pt-4">
