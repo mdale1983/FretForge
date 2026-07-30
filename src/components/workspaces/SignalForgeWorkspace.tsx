@@ -4,7 +4,6 @@ import {
   Activity,
   AlertTriangle,
   ArrowDown,
-  ArrowUp,
   CheckCircle2,
   Download,
   Edit3,
@@ -28,7 +27,7 @@ import {
 import { getFretForgeLinkState, type FretForgeLinkState } from "../../services/studioApplicationService";
 import { listAmpSimulators, type AmpSimulator } from "../../services/signalApplicationService";
 import GearDeviceVisual from "../../features/signalforge/GearDeviceVisual";
-import { catalogLabel, findCatalogItem, gearCatalog } from "../../features/signalforge/gearCatalog";
+import { activePickupModels, catalogLabel, findCatalogItem, gearCatalog } from "../../features/signalforge/gearCatalog";
 
 type SignalForgeWorkspaceProps = { theme: string };
 
@@ -57,6 +56,11 @@ function newBlock(type: SignalBlockType): SignalBlock {
     type,
     label: catalogItem ? catalogLabel(catalogItem) : option.label,
     bypassed: false,
+    ...(type === "instrument" ? {
+      label: "Passive Guitar · 2 Pickups",
+      pickupCount: 2 as const,
+      pickupTechnology: "passive" as const,
+    } : {}),
   };
 }
 
@@ -133,11 +137,11 @@ function GuitarEndpointVisual({ pickupCount, pickupLabels }: { pickupCount: 1 | 
   </div>;
 }
 
-function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; steps: RoutingStep[] }) {
+function PedalboardRoutingDiagram({ blocks, steps, onToggleBypass }: { blocks: SignalBlock[]; steps: RoutingStep[]; onToggleBypass: (blockId: string) => void }) {
   const cardWidth = 86;
   const cardHeight = 180;
   const instrumentWidth = 148;
-  const spacing = 112;
+  const spacing = 124;
   const gateIndex = blocks.findIndex((block) => {
     const profile = findCatalogItem(block.label, block.type)?.routingProfile;
     return profile === "detector_loop" || profile === "send_return_loop";
@@ -158,8 +162,8 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
   const instrumentBlock = instruments[0];
   const destinationBlock = destinations[0];
   const boardViewportRef = useRef<HTMLDivElement>(null);
-  const [canvasColumns, setCanvasColumns] = useState(4);
-  const [boardScale, setBoardScale] = useState(1);
+  const [selectedPedalId, setSelectedPedalId] = useState<string | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(398);
   const pedalsPerRow = 3;
   const rowSpacing = 196;
   const cleanStartY = 6;
@@ -167,30 +171,35 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
   const cleanRows = Math.max(1, Math.ceil(cleanPedals.length / pedalsPerRow));
   const noiseRows = Math.ceil(noiseBlocks.length / pedalsPerRow);
   const centerStartX = 24;
-  const boardWidth = centerStartX + Math.max(0, canvasColumns - 1) * spacing + cardWidth + 24;
+  const baseBoardWidth = centerStartX + (pedalsPerRow - 1) * spacing + cardWidth + 24;
+  const availableViewportWidth = Math.max(1, viewportWidth - 16);
+  const boardScale = Math.max(.65, Math.min(2, availableViewportWidth / baseBoardWidth));
+  const boardWidth = Math.max(baseBoardWidth, availableViewportWidth / boardScale);
   const boardHeight = Math.max(246, cleanStartY + cleanRows * rowSpacing + noiseRows * rowSpacing + boardBottomInset - 16);
   const noiseStartY = boardHeight - boardBottomInset - cardHeight - Math.max(0, noiseRows - 1) * rowSpacing;
+  const distributedRowX = (rowCount: number, column: number) => {
+    if (rowCount <= 1) return (boardWidth - cardWidth) / 2;
+    if (rowCount === 2) return boardWidth * ((column + 1) / 3) - cardWidth / 2;
+    const edgeInset = 34;
+    const availableWidth = boardWidth - edgeInset * 2 - cardWidth;
+    return edgeInset + column * (availableWidth / (rowCount - 1));
+  };
   const centeredLanePosition = (items: SignalBlock[], itemIndex: number, startY: number) => {
     const row = Math.floor(itemIndex / pedalsPerRow);
     const column = itemIndex % pedalsPerRow;
     const rowCount = Math.min(pedalsPerRow, items.length - row * pedalsPerRow);
-    const rowWidth = Math.max(0, rowCount - 1) * spacing + cardWidth;
-    return { x: (boardWidth - rowWidth) / 2 + column * spacing, y: startY + row * rowSpacing };
+    return { x: distributedRowX(rowCount, column), y: startY + row * rowSpacing };
   };
 
   useEffect(() => {
     const viewport = boardViewportRef.current;
     if (!viewport) return;
-    const updateLayout = (width: number) => {
-      const nextColumns = width >= 1050 ? 8 : width >= 780 ? 6 : width >= 560 ? 5 : 4;
-      setCanvasColumns(nextColumns);
-      setBoardScale(Math.max(.8, Math.min(2, width / boardWidth)));
-    };
+    const updateLayout = (width: number) => setViewportWidth(width);
     updateLayout(viewport.clientWidth);
     const observer = new ResizeObserver((entries) => updateLayout(entries[0]?.contentRect.width ?? viewport.clientWidth));
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [boardWidth]);
+  }, []);
   const positionFor = (index: number) => {
     const block = blocks[index];
     const instrumentIndex = instruments.findIndex((item) => item.id === block.id);
@@ -202,10 +211,9 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
       const row = Math.floor(noiseIndex / pedalsPerRow);
       const column = noiseIndex % pedalsPerRow;
       const rowCount = Math.min(pedalsPerRow, noiseBlocks.length - row * pedalsPerRow);
-      const rowWidth = Math.max(0, rowCount - 1) * spacing + cardWidth;
       const rowsFromBottom = noiseRows - row - 1;
       return {
-        x: (boardWidth - rowWidth) / 2 + column * spacing,
+        x: distributedRowX(rowCount, column),
         y: boardHeight - boardBottomInset - cardHeight - rowsFromBottom * rowSpacing,
       };
     }
@@ -228,14 +236,19 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
   };
 
   return (
-    <div className="mt-5 min-w-0 overflow-hidden rounded-2xl border border-zinc-700 bg-[#181512] p-3 shadow-inner sm:p-4">
-      <div className="mb-4">
+    <div className="-mx-5 mt-5 min-w-0 overflow-hidden border-t border-zinc-700 pt-4 sm:-mx-6">
+      <div className="mb-4 px-5 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-orange-400">FretForge Wiring Plan</p>
-        <p className="mt-1 text-xs text-zinc-500">FretForge places noisy gain pedals in the gate loop and time-based effects on the quiet output path.</p>
+        <p className="mt-1 text-xs text-zinc-500">Use the power button on each pedal to include or bypass it. FretForge updates the active route automatically.</p>
       </div>
-      <div className="grid min-w-0 grid-cols-[148px_minmax(0,1fr)_96px] items-stretch gap-4 overflow-hidden rounded-xl border border-zinc-800 bg-[#181512] p-1">
+      <div className="grid min-w-0 grid-cols-[148px_minmax(0,1fr)_96px] items-stretch gap-4 overflow-hidden bg-[#181512] px-0.5 pb-1">
         <div className="relative z-30 rounded-lg border border-orange-500/30 bg-zinc-950" style={{ height: boardHeight * boardScale }}>
-          {instrumentBlock && <GuitarEndpointVisual pickupCount={findCatalogItem(instrumentBlock.label, instrumentBlock.type)?.pickupCount ?? 2} pickupLabels={findCatalogItem(instrumentBlock.label, instrumentBlock.type)?.pickupLabels ?? ["NECK", "BRIDGE"]}/>} 
+          {instrumentBlock && <GuitarEndpointVisual
+            pickupCount={instrumentBlock.pickupCount ?? findCatalogItem(instrumentBlock.label, instrumentBlock.type)?.pickupCount ?? 2}
+            pickupLabels={instrumentBlock.pickupTechnology === "active"
+              ? Array.from({ length: instrumentBlock.pickupCount ?? 2 }, () => instrumentBlock.pickupModel ?? "ACTIVE")
+              : (instrumentBlock.pickupCount === 1 ? ["BRIDGE"] : instrumentBlock.pickupCount === 3 ? ["NECK", "MIDDLE", "BRIDGE"] : ["NECK", "BRIDGE"])}
+          />}
           {instrumentBlock && <span className="absolute -right-4 h-0.5 w-4 -translate-y-1/2 bg-amber-400" style={{ top: "68%" }}/>} 
           {instrumentBlock && <span className="absolute -right-1.5 h-3 w-3 -translate-y-1/2 rounded-full border border-zinc-200 bg-zinc-950 shadow-[0_0_0_2px_#27272a]" style={{ top: "68%" }} aria-label="Guitar output jack"/>}
         </div>
@@ -244,7 +257,7 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
         className="relative min-w-0 overflow-x-auto overflow-y-hidden bg-zinc-950 bg-[length:100%_100%] bg-center bg-no-repeat"
         style={{ backgroundImage: "linear-gradient(rgb(0 0 0 / 24%), rgb(0 0 0 / 24%)), url('/assets/pedalboard-surface.png')" }}
       >
-        <div className="relative z-10" style={{ width: boardWidth * boardScale, height: boardHeight * boardScale }}>
+        <div className="relative z-10 mx-2" style={{ width: boardWidth * boardScale, height: boardHeight * boardScale }}>
         <div className="relative origin-top-left" style={{ width: boardWidth, height: boardHeight, transform: `scale(${boardScale})` }}>
           <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-label="Pedalboard cable routing">
             {steps.map((step, index) => {
@@ -289,9 +302,10 @@ function PedalboardRoutingDiagram({ blocks, steps }: { blocks: SignalBlock[]; st
               </g>;
             })}
           </svg>
-          {hasDetectorLoop && <div className="absolute rounded-xl border border-dashed border-orange-500/30 bg-orange-500/5" style={{ left: (boardWidth - ((Math.min(pedalsPerRow, noiseBlocks.length) - 1) * spacing + cardWidth)) / 2 - 8, top: noiseStartY - 10, width: (Math.min(pedalsPerRow, noiseBlocks.length) - 1) * spacing + cardWidth + 16, height: Math.max(196, noiseRows * rowSpacing) }}><span className="absolute bottom-1.5 left-2 text-[7px] font-semibold uppercase tracking-[0.15em] text-orange-300">Noise-gate loop</span></div>}
-          {blocks.map((block, index) => { const position = positionFor(index); const isEndpoint = block.type === "instrument" || block.type === "interface" || block.type === "daw"; if (isEndpoint) return null; return <div key={`board-${block.id}`} title={`${block.type.replace("_", " ")}: ${block.label}`} className={`absolute z-10 flex flex-col items-center justify-center rounded-xl bg-transparent p-0 text-center shadow-lg ${block.bypassed ? "opacity-45" : ""}`} style={{ left: position.x, top: position.y, width: cardWidth, height: cardHeight }}>
+          {hasDetectorLoop && (() => { const rowCount = Math.min(pedalsPerRow, noiseBlocks.length); const left = distributedRowX(rowCount, 0) - 8; const right = distributedRowX(rowCount, rowCount - 1) + cardWidth + 8; return <div className="absolute rounded-xl border border-dashed border-orange-500/30 bg-orange-500/5" style={{ left, top: noiseStartY - 10, width: right - left, height: Math.max(196, noiseRows * rowSpacing) }}><span className="absolute bottom-1.5 left-2 text-[7px] font-semibold uppercase tracking-[0.15em] text-orange-300">Noise-gate loop</span></div>; })()}
+          {blocks.map((block, index) => { const position = positionFor(index); const isEndpoint = block.type === "instrument" || block.type === "interface" || block.type === "daw"; if (isEndpoint) return null; return <div key={`board-${block.id}`} title={`${block.type.replace("_", " ")}: ${block.label}`} onClick={() => setSelectedPedalId(block.id)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPedalId(block.id); }} aria-pressed={selectedPedalId === block.id} className={`absolute z-10 flex flex-col items-center justify-center rounded-xl bg-transparent p-0 text-center shadow-lg transition ${selectedPedalId === block.id ? "ring-2 ring-orange-400 ring-offset-2 ring-offset-zinc-950" : "hover:ring-1 hover:ring-orange-400/70"} ${block.bypassed ? "grayscale opacity-55" : ""}`} style={{ left: position.x, top: position.y, width: cardWidth, height: cardHeight }}>
             <GearDeviceVisual label={block.label} type={block.type} compact showPorts pedalboard/>
+            <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedPedalId(block.id); onToggleBypass(block.id); }} aria-label={`${block.bypassed ? "Power on" : "Bypass"} ${findCatalogItem(block.label, block.type)?.model ?? block.label}`} aria-pressed={!block.bypassed} className={`absolute bottom-3 left-1/2 z-30 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 shadow-lg transition ${block.bypassed ? "border-zinc-500 bg-zinc-800 text-zinc-400" : "border-emerald-200 bg-emerald-500 text-zinc-950 shadow-emerald-500/40"}`}><Power size={14} strokeWidth={3}/></button>
           </div>; })}
         </div></div>
       </div>
@@ -385,6 +399,18 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
     }, "This signal chain could not be saved.");
   }
 
+  async function toggleBoardPedal(blockId: string) {
+    if (!selectedId) return;
+    const nextBlocks = blocks.map((block) => block.id === blockId ? { ...block, bypassed: !block.bypassed } : block);
+    await action.run(async () => {
+      await updateSignalChain(selectedId, name.trim(), nextBlocks, notes);
+      setBlocks(nextBlocks);
+      setChains((current) => current.map((chain) => chain.id === selectedId
+        ? { ...chain, blocks: nextBlocks, updated_at: new Date().toISOString() }
+        : chain));
+    }, "The pedal power state could not be saved.");
+  }
+
   async function cancelNewChain() {
     setIsBuildingNew(false);
     setIsEditing(false);
@@ -411,12 +437,33 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
     if (item) updateBlock(block.id, { type: item.type, label: catalogLabel(item) });
   }
 
+  function updatePickupConfiguration(
+    block: SignalBlock,
+    updates: Pick<Partial<SignalBlock>, "pickupCount" | "pickupTechnology" | "pickupModel">,
+  ) {
+    const next = { ...block, ...updates };
+    const pickupCount = next.pickupCount ?? 2;
+    const technology = next.pickupTechnology ?? "passive";
+    const pickupModel = technology === "active" ? next.pickupModel ?? activePickupModels[0] : undefined;
+    updateBlock(block.id, {
+      pickupCount,
+      pickupTechnology: technology,
+      pickupModel,
+      label: technology === "active"
+        ? `${pickupModel} · ${pickupCount} Pickup${pickupCount === 1 ? "" : "s"}`
+        : `Passive Guitar · ${pickupCount} Pickup${pickupCount === 1 ? "" : "s"}`,
+    });
+  }
+
   function changeBlockType(block: SignalBlock, type: SignalBlockType) {
     const firstCatalogItem = gearCatalog.find((item) => item.type === type);
     const fallbackLabel = blockOptions.find((option) => option.type === type)?.label ?? "Device";
     updateBlock(block.id, {
       type,
-      label: firstCatalogItem ? catalogLabel(firstCatalogItem) : fallbackLabel,
+      label: type === "instrument" ? "Passive Guitar · 2 Pickups" : firstCatalogItem ? catalogLabel(firstCatalogItem) : fallbackLabel,
+      pickupCount: type === "instrument" ? 2 : undefined,
+      pickupTechnology: type === "instrument" ? "passive" : undefined,
+      pickupModel: undefined,
     });
   }
 
@@ -434,20 +481,6 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
     setIsEditing(false);
   }
 
-  function moveBlock(index: number, direction: -1 | 1) {
-    const destination = index + direction;
-    if (destination < 0 || destination >= blocks.length) return;
-    setBlocks((current) => {
-      const reordered = [...current];
-      [reordered[index], reordered[destination]] = [
-        reordered[destination],
-        reordered[index],
-      ];
-      return reordered;
-    });
-  }
-
-
   const inputClass = `rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 ${
     theme === "dark"
       ? "border-zinc-700 bg-zinc-950 text-zinc-100"
@@ -459,7 +492,9 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
   const lowSignal = linkState?.connected && (linkState.input_peak ?? 0) < 0.002;
   const hasCompletedSignalPath =
     blocks.length >= 2 &&
-    blocks.every((block) => Boolean(findCatalogItem(block.label, block.type)));
+    blocks.every((block) => block.type === "instrument"
+      ? Boolean(block.pickupCount && block.pickupTechnology && (block.pickupTechnology === "passive" || block.pickupModel))
+      : Boolean(findCatalogItem(block.label, block.type)));
   const routingSteps = buildRoutingSteps(blocks);
 
   return (
@@ -496,7 +531,7 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
       {action.errorMessage && <p className="mt-4 text-sm text-red-400" role="alert">{action.errorMessage}</p>}
 
       <div className="mt-6 grid grid-cols-1 gap-5">
-        <div className="min-w-0 rounded-xl border border-zinc-700/60 p-4 sm:p-5">
+        <div className={`min-w-0 ${(isBuildingNew || isEditing) ? "rounded-xl border border-zinc-700/60 p-4 sm:p-5" : ""}`}>
           {(selectedId || isBuildingNew) ? <>
             {isDirty && <p className="mb-4 text-xs font-medium text-orange-400">Unsaved changes</p>}
             {(isBuildingNew || isEditing) && <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
@@ -505,7 +540,7 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
               {(isBuildingNew || isEditing) && <button type="button" onClick={handleSave} className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white"><Save size={15} /> Save</button>}
             </div>}
 
-            {!isBuildingNew && !isEditing && hasCompletedSignalPath && <PedalboardRoutingDiagram blocks={blocks} steps={routingSteps} />}
+            {!isBuildingNew && !isEditing && hasCompletedSignalPath && <PedalboardRoutingDiagram blocks={blocks} steps={routingSteps} onToggleBypass={toggleBoardPedal} />}
 
             {(isBuildingNew || isEditing) && <>
 
@@ -516,13 +551,14 @@ export default function SignalForgeWorkspace({ theme }: SignalForgeWorkspaceProp
 
             <div className="mt-5 space-y-2">
               {blocks.map((block, index) => (<div key={block.id}>
-                <div className={`grid items-end gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] ${block.bypassed ? "border-zinc-800 opacity-50" : "border-zinc-700/60"}`}>
+                <div className={`grid items-end gap-3 rounded-xl border p-3 md:grid-cols-[9rem_minmax(0,1fr)_auto] ${block.bypassed ? "border-zinc-800 opacity-50" : "border-zinc-700/60"}`}>
                   <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Device Type<select value={block.type} onChange={(event) => changeBlockType(block, event.target.value as SignalBlockType)} className={inputClass}>{blockOptions.map((option) => <option key={option.type} value={option.type}>{option.label}</option>)}</select></label>
-                  <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Device Model<select value={findCatalogItem(block.label, block.type)?.id ?? ""} onChange={(event) => selectCatalogGear(block, event.target.value)} className={inputClass} aria-label={`${block.type} device model`}><option value="" disabled>Select a device</option>{gearCatalog.filter((item) => item.type === block.type).map((item) => <option key={item.id} value={item.id}>{catalogLabel(item)}</option>)}</select></label>
+                  {block.type === "instrument" ? <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(6.5rem,.7fr)_minmax(6.5rem,.7fr)_minmax(10rem,1.6fr)]">
+                    <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Pickup Count<select value={block.pickupCount ?? 2} onChange={(event) => updatePickupConfiguration(block, { pickupCount: Number(event.target.value) as 1 | 2 | 3 })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value={1}>1 Pickup</option><option value={2}>2 Pickups</option><option value={3}>3 Pickups</option></select></label>
+                    <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Pickup Type<select value={block.pickupTechnology ?? "passive"} onChange={(event) => updatePickupConfiguration(block, { pickupTechnology: event.target.value as "active" | "passive", pickupModel: event.target.value === "active" ? block.pickupModel ?? activePickupModels[0] : undefined })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value="passive">Passive</option><option value="active">Active</option></select></label>
+                    {block.pickupTechnology === "active" && <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500 sm:col-span-2 xl:col-span-1">Active Pickup Model<select value={block.pickupModel ?? activePickupModels[0]} onChange={(event) => updatePickupConfiguration(block, { pickupModel: event.target.value })} className={`${inputClass} w-full min-w-0 max-w-full`}><option value={activePickupModels[0]}>{activePickupModels[0]}</option>{activePickupModels.slice(1).map((model) => <option key={model} value={model}>{model}</option>)}</select></label>}
+                  </div> : <label className="grid min-w-0 gap-1 text-xs uppercase tracking-wide text-zinc-500">Device Model<select value={findCatalogItem(block.label, block.type)?.id ?? ""} onChange={(event) => selectCatalogGear(block, event.target.value)} className={inputClass} aria-label={`${block.type} device model`}><option value="" disabled>Select a device</option>{gearCatalog.filter((item) => item.type === block.type).map((item) => <option key={item.id} value={item.id}>{catalogLabel(item)}</option>)}</select></label>}
                   <div className="flex gap-1">
-                    <button type="button" onClick={() => moveBlock(index, -1)} disabled={index === 0} className="rounded p-2 disabled:opacity-25" aria-label="Move block up"><ArrowUp size={15} /></button>
-                    <button type="button" onClick={() => moveBlock(index, 1)} disabled={index === blocks.length - 1} className="rounded p-2 disabled:opacity-25" aria-label="Move block down"><ArrowDown size={15} /></button>
-                    <button type="button" onClick={() => updateBlock(block.id, { bypassed: !block.bypassed })} className={`rounded p-2 ${block.bypassed ? "text-zinc-500" : "text-emerald-400"}`} aria-label="Toggle bypass"><Power size={15} /></button>
                     <button type="button" onClick={() => setBlocks((current) => current.filter((item) => item.id !== block.id))} className="rounded p-2 text-red-400" aria-label="Remove block"><Trash2 size={15} /></button>
                   </div>
                 </div>

@@ -21,6 +21,9 @@ export type SignalBlock = {
   type: SignalBlockType;
   label: string;
   bypassed: boolean;
+  pickupCount?: 1 | 2 | 3;
+  pickupTechnology?: "active" | "passive";
+  pickupModel?: string;
 };
 
 export type SignalChain = {
@@ -51,7 +54,18 @@ function parseChain(row: SignalChainRow): SignalChain {
 
   try {
     const parsed = JSON.parse(row.chain_json);
-    if (Array.isArray(parsed)) blocks = parsed as SignalBlock[];
+    if (Array.isArray(parsed)) blocks = (parsed as SignalBlock[]).map((storedBlock) => {
+      const block = { ...storedBlock, bypassed: Boolean(storedBlock.bypassed) };
+      if (block.type !== "instrument" || block.pickupCount) return block;
+      const active = /\b(emg|fishman|blackouts?)\b/i.test(block.label);
+      const pickupCount = /single|1 pickup/i.test(block.label) ? 1 : /three|3 pickup/i.test(block.label) ? 3 : 2;
+      return {
+        ...block,
+        pickupCount,
+        pickupTechnology: active ? "active" : "passive",
+        pickupModel: active ? block.label : undefined,
+      };
+    });
   } catch {
     blocks = defaultSignalBlocks;
   }
