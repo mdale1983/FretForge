@@ -6,6 +6,7 @@ type CurrentProjectCardProps = {
   activeSession: Session | null;
   sessionCount: number;
   theme: string;
+  onManage?: () => void;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -55,12 +56,17 @@ export default function CurrentProjectCard({
   activeSession,
   sessionCount,
   theme,
+  onManage,
 }: CurrentProjectCardProps) {
   const projectNotes = project?.notes?.trim();
+  const rigSnapshot = (() => { try { return project?.rig_snapshot_json ? JSON.parse(project.rig_snapshot_json) as { name?: string; blocks?: { type: string; label: string; bypassed: boolean }[] } : null; } catch { return null; } })();
+  const pedals = rigSnapshot?.blocks?.filter((block) => !["instrument", "wireless", "interface", "daw"].includes(block.type)) ?? [];
+  const activePedals = pedals.filter((pedal) => !pedal.bypassed).map((pedal) => pedal.label);
+  const bypassedPedals = pedals.filter((pedal) => pedal.bypassed).map((pedal) => pedal.label);
 
   return (
     <div
-      className={`flex h-[500px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
+      className={`flex min-h-[360px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
         theme === "dark"
           ? "border-zinc-800 bg-zinc-900/80 shadow-black/20 hover:border-zinc-700 hover:bg-zinc-900 hover:-translate-y-0.5"
           : "border-zinc-300 bg-white shadow-zinc-300/40 hover:border-zinc-400 hover:bg-zinc-50 hover:-translate-y-0.5"
@@ -80,7 +86,7 @@ export default function CurrentProjectCard({
             theme === "dark" ? "text-zinc-400" : "text-zinc-700"
           }`}
         >
-          No project loaded.
+          Please create your first project.
         </p>
       ) : (
         <div className="flex h-full min-h-0 flex-col">
@@ -89,13 +95,10 @@ export default function CurrentProjectCard({
               {project.name}
             </div>
 
-            <div className="mt-1 text-xs text-zinc-500">
-              Active Project
-            </div>
           </div>
 
           <div
-            className={`mt-4 rounded-md border px-3 py-2 text-xs leading-relaxed line-clamp-4 break-words ${
+            className={`mt-4 min-h-[120px] flex-1 overflow-y-auto rounded-md border px-3 py-3 text-xs leading-relaxed break-words ${
               theme === "dark"
                 ? "border-zinc-800 bg-zinc-950 text-zinc-400"
                 : "border-zinc-300 bg-zinc-50 text-zinc-600"
@@ -104,10 +107,14 @@ export default function CurrentProjectCard({
             {projectNotes || "No project notes yet."}
           </div>
 
+          <div className={`mt-4 rounded-xl border p-3 text-xs ${theme === "dark" ? "border-orange-500/30 bg-orange-500/5" : "border-orange-300 bg-orange-50"}`}>
+            <div className="grid gap-2"><p><span className="text-zinc-500">Tuning:</span> <strong>{project.tuning ?? "C# Standard"}</strong></p><p><span className="text-zinc-500">Pedal Setup:</span> <strong>{rigSnapshot?.name ?? "Not assigned"}</strong></p><p><span className="text-zinc-500">Active Pedals:</span> {activePedals.join(", ") || "None"}</p><p><span className="text-zinc-500">Bypassed Pedals:</span> {bypassedPedals.join(", ") || "None"}</p></div>
+          </div>
+
           <div className="mt-auto grid grid-cols-1 gap-3 pt-4">
             <DetailRow
               label="Active Session"
-              value={activeSession ? activeSession.name : "No active session"}
+              value={activeSession ? activeSession.name : "Please create your first session"}
               theme={theme}
             />
 
@@ -118,18 +125,12 @@ export default function CurrentProjectCard({
             />
 
             <DetailRow
-              label="Created"
-              value={formatDate(project.created_at)}
-              theme={theme}
-            />
-
-            <DetailRow
               label="Updated"
               value={formatDate(project.updated_at)}
               theme={theme}
             />
 
-            <DetailRow label="Status" value="Active" theme={theme} />
+            {onManage && <button type="button" onClick={onManage} className="mt-1 rounded-lg border border-orange-500 px-4 py-2 text-sm font-medium text-orange-400 hover:bg-orange-500/10">Manage Projects</button>}
           </div>
         </div>
       )}

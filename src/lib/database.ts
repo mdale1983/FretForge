@@ -40,6 +40,9 @@ export async function initializeDatabase() {
 
   await addColumnIfMissing(database, "projects", "notes", "TEXT");
   await addColumnIfMissing(database, "projects", "completed_at", "TEXT");
+  await addColumnIfMissing(database, "projects", "tuning", "TEXT NOT NULL DEFAULT 'C# Standard'");
+  await addColumnIfMissing(database, "projects", "signal_chain_id", "INTEGER");
+  await addColumnIfMissing(database, "projects", "rig_snapshot_json", "TEXT");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS app_state (
@@ -73,6 +76,7 @@ export async function initializeDatabase() {
   await addColumnIfMissing(database, "sessions", "completed_at", "TEXT");
   await addColumnIfMissing(database, "sessions", "signal_chain_id", "INTEGER");
   await addColumnIfMissing(database, "sessions", "rig_snapshot_json", "TEXT");
+  await addColumnIfMissing(database, "sessions", "tuning", "TEXT NOT NULL DEFAULT 'C# Standard'");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS forgepulse_runs (

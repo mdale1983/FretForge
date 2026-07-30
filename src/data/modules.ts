@@ -12,10 +12,12 @@ import {
   Radio,
   CircleDot,
   Volume2,
+  CalendarDays,
 } from "lucide-react";
 
 export type ModuleId =
   | "forge"
+  | "sessions"
   | "rhythm"
   | "lead"
   | "bass"
@@ -36,6 +38,12 @@ export const modules = [
     icon: Home,
     name: "The Forge",
     description: "Dashboard and central workspace.",
+  },
+  {
+    id: "sessions",
+    icon: CalendarDays,
+    name: "Sessions",
+    description: "Projects, practice sessions, active rigs, notes, and history.",
   },
   {
     id: "rhythm",

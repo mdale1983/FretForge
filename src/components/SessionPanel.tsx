@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getActiveProjectId } from "../services/projectService";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import NewSessionModal from "./NewSessionModal";
+import { setActiveProject } from "../services/projectService";
 import {
   completeSession,
   getCompletedSessionsForProject,
@@ -10,13 +12,9 @@ import {
   getSessionsForProject,
   renameSession,
   setActiveSession,
-  switchToFallbackSessionBeforeDelete,
   updateSessionNotes,
-  assignSignalChainToSession,
   type Session,
 } from "../services/SessionService";
-import { getSignalChains, type SignalChain } from "../features/signalforge/signalChainService";
-import { buildRoutingSteps, routingStepKey } from "../features/signalforge/signalRoutingService";
 
 type SessionPanelProps = {
   theme: string;
@@ -31,7 +29,6 @@ function SessionPanel({
 }: SessionPanelProps) {
   const sessionAction = useAsyncAction();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [signalChains, setSignalChains] = useState<SignalChain[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [isCompletedSessionsOpen, setIsCompletedSessionsOpen] = useState(false);
   const [completedSessions, setCompletedSessions] = useState<Session[]>([]);
@@ -45,23 +42,11 @@ function SessionPanel({
     useState<number | null>(null);
 
   const [notesValue, setNotesValue] = useState("");
-  const [sessionQuery, setSessionQuery] = useState("");
-  const [sessionSort, setSessionSort] = useState<"recent" | "name">("recent");
-
-  const visibleSessions = useMemo(() => {
-    const normalizedQuery = sessionQuery.trim().toLocaleLowerCase();
-    const filteredSessions = normalizedQuery
-      ? sessions.filter((session) =>
-          session.name.toLocaleLowerCase().includes(normalizedQuery)
-        )
-      : sessions;
-
-    return sessionSort === "name"
-      ? [...filteredSessions].sort((left, right) =>
-          left.name.localeCompare(right.name)
-        )
-      : filteredSessions;
-  }, [sessionQuery, sessionSort, sessions]);
+  const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
+  const selectedSession =
+    sessions.find((session) => session.id === currentActiveSessionId) ?? sessions[0] ?? null;
+  const sessionQuery = "";
+  const visibleSessions = selectedSession ? [selectedSession] : [];
 
   async function loadSessions() {
     const projectId = await getActiveProjectId();
@@ -72,35 +57,11 @@ function SessionPanel({
 
     if (!projectId) {
       setSessions([]);
-      setSignalChains([]);
       return;
     }
 
     const loadedSessions = await getSessionsForProject(projectId);
     setSessions(loadedSessions);
-    setSignalChains(await getSignalChains());
-  }
-
-  function isRigSetupComplete(chain: SignalChain) {
-    const signature = buildRoutingSteps(chain.blocks).map(routingStepKey).join("|");
-    return Boolean(signature) && localStorage.getItem(`fretforge.signalChainSetupConfirmed.${chain.id}`) === signature;
-  }
-
-  function snapshotName(session: Session) {
-    try {
-      return session.rig_snapshot_json ? (JSON.parse(session.rig_snapshot_json) as { name?: string }).name : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async function handleAssignRig(sessionId: number, chainId: number | null) {
-    const chain = signalChains.find((item) => item.id === chainId) ?? null;
-    await sessionAction.run(async () => {
-      await assignSignalChainToSession(sessionId, chain);
-      await loadSessions();
-      await onWorkstationStatusRefresh();
-    }, "The active rig could not be saved to this session.");
   }
 
   async function loadCompletedSessions() {
@@ -115,14 +76,10 @@ function SessionPanel({
     setCompletedSessions(loadedCompletedSessions);
   }
 
-  async function handleNewSession() {
-    if (!activeProjectId) {
-      window.alert("No active project selected.");
-      return;
-    }
-
+  async function handleNewSession(projectId: number, name: string, notes: string) {
     await sessionAction.run(async () => {
-      const newSession = await createSession(activeProjectId);
+      await setActiveProject(projectId);
+      const newSession = await createSession(projectId, name, notes);
 
       if (newSession) {
         await setActiveSession(newSession.id);
@@ -130,6 +87,7 @@ function SessionPanel({
 
       await loadSessions();
       await onWorkstationStatusRefresh();
+      setIsNewSessionOpen(false);
     }, "A new session could not be created.");
   }
 
@@ -182,12 +140,6 @@ function SessionPanel({
     if (!confirmed) return;
 
     await sessionAction.run(async () => {
-      const activeSessionId = await getActiveSessionId();
-
-      if (activeSessionId === sessionId) {
-        await switchToFallbackSessionBeforeDelete(activeProjectId, sessionId);
-      }
-
       await deleteSession(sessionId);
 
       await loadSessions();
@@ -239,7 +191,7 @@ function SessionPanel({
   return (
     <div
       aria-busy={sessionAction.isPending}
-      className={`flex h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
+      className={`flex h-full min-h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
         theme === "dark"
           ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
           : "border-zinc-300 bg-white shadow-zinc-300/40"
@@ -263,7 +215,7 @@ function SessionPanel({
         <div className="mb-5 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={handleNewSession}
+            onClick={() => setIsNewSessionOpen(true)}
             disabled={!activeProjectId}
             className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
               theme === "dark"
@@ -296,46 +248,30 @@ function SessionPanel({
             theme === "dark" ? "text-zinc-400" : "text-zinc-600"
           }`}
         >
-          {visibleSessions.length === sessions.length
-            ? sessions.length
-            : `${visibleSessions.length} of ${sessions.length}`} saved session
+          {sessions.length} saved session
           {sessions.length === 1 ? "" : "s"} for the active project.
         </p>
 
-        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-          <input
-            type="search"
-            value={sessionQuery}
-            onChange={(event) => setSessionQuery(event.target.value)}
-            placeholder="Search sessions"
-            aria-label="Search sessions"
-            disabled={!activeProjectId}
-            className={`min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50 ${
-              theme === "dark"
-                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                : "border-zinc-300 bg-white text-zinc-900"
-            }`}
-          />
+        <div className="mt-4">
+          <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-zinc-500">Selected Session</label>
           <select
-            value={sessionSort}
-            onChange={(event) =>
-              setSessionSort(event.target.value as "recent" | "name")
-            }
-            aria-label="Sort sessions"
+            value={selectedSession?.id ?? ""}
+            onChange={(event) => handleSelectSession(Number(event.target.value))}
+            aria-label="Select session"
             disabled={!activeProjectId}
-            className={`rounded-lg border px-3 py-2 text-sm disabled:opacity-50 ${
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm disabled:opacity-50 ${
               theme === "dark"
                 ? "border-zinc-700 bg-zinc-950 text-zinc-100"
                 : "border-zinc-300 bg-white text-zinc-900"
             }`}
           >
-            <option value="recent">Recent</option>
-            <option value="name">Name</option>
+            {sessions.length === 0 && <option value="">No sessions available</option>}
+            {sessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {visibleSessions.length === 0 && (
           <div
             className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
@@ -347,7 +283,7 @@ function SessionPanel({
             {!activeProjectId
               ? "Select or create a project before managing sessions."
               : sessions.length === 0
-                ? "No sessions found. Create a session to begin tracking recording, practice, and workflow progress."
+                ? "Please create your first session for this project."
                 : `No sessions match “${sessionQuery.trim()}”.`}
           </div>
         )}
@@ -366,7 +302,7 @@ function SessionPanel({
                   handleSelectSession(session.id);
                 }
               }}
-              className={`max-w-full overflow-hidden cursor-pointer rounded-xl border px-4 py-3 text-sm transition-all duration-200 ${
+              className={`h-full min-h-[360px] max-w-full cursor-pointer overflow-hidden rounded-xl border px-4 py-4 text-sm transition-all duration-200 ${
                 isActive
                   ? "border-orange-500 bg-orange-500/10 shadow-inner shadow-orange-500/10"
                   : theme === "dark"
@@ -374,8 +310,8 @@ function SessionPanel({
                   : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-200"
               }`}
             >
-              <div className="flex flex-col gap-3">
-                <div className="min-w-0 flex-1">
+              <div className="flex h-full flex-col gap-3">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   {renamingSessionId === session.id ? (
                     <input
                       value={renameValue}
@@ -413,32 +349,20 @@ function SessionPanel({
                     </div>
                   )}
 
-                  <div className="mt-1 text-xs text-zinc-500">
-                    Session #{session.id}
-                    {isActive ? " — Active" : ""}
-                  </div>
-
                   <div className="text-xs text-zinc-500">
                     {new Date(session.updated_at).toLocaleString()}
                   </div>
 
-                  <div className="mt-3 rounded-lg border border-zinc-700/60 p-3" onClick={(event) => event.stopPropagation()}>
-                    <div className="flex items-center justify-between gap-2"><label className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500" htmlFor={`session-rig-${session.id}`}>Active Rig</label>{session.signal_chain_id && <span className={`text-[10px] ${signalChains.find((chain) => chain.id === session.signal_chain_id && isRigSetupComplete(chain)) ? "text-emerald-400" : "text-amber-400"}`}>{signalChains.find((chain) => chain.id === session.signal_chain_id && isRigSetupComplete(chain)) ? "Setup ready" : "Setup needs review"}</span>}</div>
-                    <select id={`session-rig-${session.id}`} value={session.signal_chain_id ?? ""} onChange={(event) => handleAssignRig(session.id, event.target.value ? Number(event.target.value) : null)} className={`mt-2 w-full rounded-md border px-2 py-1.5 text-xs outline-none ${theme === "dark" ? "border-zinc-700 bg-zinc-950 text-zinc-100" : "border-zinc-300 bg-white text-zinc-900"}`}><option value="">No rig selected</option>{signalChains.map((chain) => <option key={chain.id} value={chain.id}>{chain.name}{isRigSetupComplete(chain) ? " · Ready" : " · Needs setup"}</option>)}</select>
-                    {session.rig_snapshot_json && <p className="mt-2 text-[10px] text-zinc-500">Session snapshot: {snapshotName(session) ?? "Saved rig"}</p>}
-                  </div>
-
-                  <div className="mt-3">
+                  <div className="mt-3 min-h-0 flex-1">
                     {editingNotesSessionId === session.id ? (
-                      <div className="space-y-2">
+                      <div className="flex h-full min-h-0 flex-col gap-2">
                         <textarea
                           value={notesValue}
                           maxLength={250}
                           autoFocus
                           onChange={(event) => setNotesValue(event.target.value)}
                           onClick={(event) => event.stopPropagation()}
-                          rows={4}
-                          className={`w-full resize-none rounded-md border px-3 py-2 text-xs outline-none ${
+                          className={`min-h-[140px] w-full flex-1 resize-none rounded-md border px-3 py-2 text-xs outline-none ${
                             theme === "dark"
                               ? "border-zinc-700 bg-zinc-950 text-zinc-100"
                               : "border-zinc-300 bg-white text-zinc-900"
@@ -488,7 +412,7 @@ function SessionPanel({
                       </div>
                     ) : (
                       <div
-                        className={`max-w-full overflow-hidden rounded-md border px-3 py-2 text-xs leading-relaxed break-words ${
+                        className={`h-full min-h-[140px] max-w-full overflow-y-auto rounded-md border px-3 py-3 text-xs leading-relaxed break-words ${
                           theme === "dark"
                             ? "border-zinc-800 bg-zinc-950 text-zinc-400"
                             : "border-zinc-300 bg-zinc-50 text-zinc-600"
@@ -501,7 +425,7 @@ function SessionPanel({
 
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className={`mt-auto grid grid-cols-4 gap-1.5 border-t pt-4 ${theme === "dark" ? "border-zinc-800" : "border-zinc-300"}`}>
                   <button
                     type="button"
                     onClick={(event) => {
@@ -509,7 +433,7 @@ function SessionPanel({
                       setRenamingSessionId(session.id);
                       setRenameValue(session.name);
                     }}
-                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                       theme === "dark"
                         ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800"
                         : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
@@ -525,7 +449,7 @@ function SessionPanel({
                       setEditingNotesSessionId(session.id);
                       setNotesValue(session.notes ?? "");
                     }}
-                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                       theme === "dark"
                         ? "border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
                         : "border-blue-400 text-blue-700 hover:bg-blue-50"
@@ -540,7 +464,7 @@ function SessionPanel({
                       event.stopPropagation();
                       handleCompleteSession(session);
                     }}
-                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                       theme === "dark"
                         ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
                         : "border-emerald-400 text-emerald-700 hover:bg-emerald-50"
@@ -555,7 +479,7 @@ function SessionPanel({
                       event.stopPropagation();
                       handleDeleteSession(session.id);
                     }}
-                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                       theme === "dark"
                         ? "border-red-500/40 text-red-300 hover:bg-red-500/10"
                         : "border-red-400 text-red-600 hover:bg-red-50"
@@ -653,6 +577,7 @@ function SessionPanel({
           </div>
         </div>
       )}
+      {isNewSessionOpen && <NewSessionModal theme={theme} defaultProjectId={activeProjectId} onClose={() => setIsNewSessionOpen(false)} onCreate={handleNewSession} />}
     </div>
   );
 }

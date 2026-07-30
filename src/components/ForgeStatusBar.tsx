@@ -12,6 +12,8 @@ type ForgeStatusBarProps = {
   }[];
   selectedAudioDevice: string;
   setSelectedAudioDevice: (device: string) => void;
+  sessionTuning: string;
+  onSessionTuningChange: (tuning: string) => Promise<void>;
 };
 
 type TuningOption = {
@@ -68,6 +70,8 @@ function ForgeStatusBar({
   theme,
   setTheme,
   workstationStatus,
+  sessionTuning,
+  onSessionTuningChange,
 }: ForgeStatusBarProps) {
   const [stringCount, setStringCount] = useState<6 | 7 | 8>(6);
   const [selectedTuning, setSelectedTuning] = useState<TuningOption>(
@@ -77,6 +81,13 @@ function ForgeStatusBar({
   const [monitorRoute, setMonitorRoute] = useState(
     () => localStorage.getItem("fretforge.monitorRoute") ?? "fretforge"
   );
+
+  useEffect(() => {
+    const tuning = tuningOptions.find((option) => option.name === sessionTuning);
+    if (!tuning || tuning.name === selectedTuning.name) return;
+    setStringCount(tuning.stringCount);
+    setSelectedTuning(tuning);
+  }, [sessionTuning, selectedTuning.name]);
 
   const changeMonitorRoute = (route: string) => {
     setMonitorRoute(route);
@@ -320,6 +331,7 @@ function ForgeStatusBar({
 
                   if (tuning) {
                     setSelectedTuning(tuning);
+                    onSessionTuningChange(tuning.name);
                   }
                 }}
                 className={`rounded-md border px-2 py-1 text-xs outline-none ${selectClass}`}

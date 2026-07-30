@@ -27,6 +27,7 @@ import StudioPathWorkspace from "./workspaces/StudioPathWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
+  setActiveModule: (module: string) => void;
   theme: string;
   onWorkstationStatusRefresh: () => Promise<void>;
 };
@@ -78,6 +79,7 @@ function getWorkspaceCards(activeModule: string) {
 
 function Workspace({
   activeModule,
+  setActiveModule,
   theme,
   onWorkstationStatusRefresh,
 }: WorkspaceProps) {
@@ -140,11 +142,11 @@ function Workspace({
   // Active workspace layout
   return (
     <main
-      className={`flex-1 overflow-auto px-4 pt-0 pb-32 sm:px-6 lg:px-8 ${
+      className={`flex min-h-0 flex-1 flex-col overflow-auto px-4 pb-6 pt-0 sm:px-6 lg:px-8 ${
         theme === "dark" ? "bg-zinc-950" : "bg-zinc-100"
       }`}
     >
-      <section className="w-full max-w-[1600px] mx-auto">
+      <section className="mx-auto flex min-h-full w-full max-w-[1600px] flex-1 flex-col">
         <div
           className={`sticky top-0 z-50 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-4 mb-8 ${
             theme === "dark"
@@ -195,20 +197,34 @@ function Workspace({
           )}
         </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-5 items-start">
+        <div className={`grid flex-1 grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-5 ${activeModule === "sessions" || activeModule === "forge" ? "items-stretch" : "items-start"}`}>
           {activeModule === "forge" && (
             <>
+              <CurrentProjectCard
+                project={recentProject}
+                activeSession={activeSession}
+                sessionCount={projectSessionCount}
+                theme={theme}
+                onManage={() => setActiveModule("sessions")}
+              />
+              <CurrentSessionCard
+                activeSession={activeSession}
+                theme={theme}
+                onManage={() => setActiveModule("sessions")}
+              />
+            </>
+          )}
+
+          {activeModule === "sessions" && (
+            <div className="col-span-full grid h-full min-h-[420px] grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
               <ProjectPanel
                 theme={theme}
                 onProjectChanged={async () => {
                   await loadCurrentProject();
-
                   setSessionRefreshKey((current) => current + 1);
-
                   await onWorkstationStatusRefresh();
                 }}
               />
-
               <SessionPanel
                 theme={theme}
                 refreshKey={sessionRefreshKey}
@@ -217,22 +233,7 @@ function Workspace({
                   await onWorkstationStatusRefresh();
                 }}
               />
-
-              <CurrentProjectCard
-                project={recentProject}
-                activeSession={activeSession}
-                sessionCount={projectSessionCount}
-                theme={theme}
-              />
-              <CurrentSessionCard
-                activeSession={activeSession}
-                theme={theme}
-                onSessionUpdated={async () => {
-                  await loadCurrentProject();
-                  await onWorkstationStatusRefresh();
-                }}
-              />
-            </>
+            </div>
           )}
 
           {activeModule === "pulse" && (

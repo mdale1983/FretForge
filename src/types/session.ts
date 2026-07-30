@@ -9,6 +9,7 @@ export interface Session {
   active_workspace?: string | null;
   signal_chain_id?: number | null;
   rig_snapshot_json?: string | null;
+  tuning?: string | null;
 }
 
 export interface SessionWorkspaceState {

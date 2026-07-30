@@ -11,6 +11,7 @@ import {
   loadWorkspaceState,
   getSessionCountForProject,
   getSessionById,
+  updateSessionTuning,
 } from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
@@ -41,6 +42,7 @@ function App() {
   );
 
   const [sessionCount, setSessionCount] = useState(0);
+  const [activeSessionTuning, setActiveSessionTuning] = useState("C# Standard");
 
   // Live workstation telemetry and audio-device selection
   const {
@@ -92,6 +94,8 @@ function App() {
     const activeSession = activeSessionId
       ? await getSessionById(activeSessionId)
       : null;
+    setActiveSessionTuning(activeSession?.tuning ?? "C# Standard");
+
 
     setWorkstationStatus((previousStatus) => ({
       ...previousStatus,
@@ -241,6 +245,12 @@ function App() {
         audioDevices={audioDevices}
         selectedAudioDevice={selectedAudioDevice}
         setSelectedAudioDevice={setSelectedAudioDevice}
+        sessionTuning={activeSessionTuning}
+        onSessionTuningChange={async (tuning) => {
+          setActiveSessionTuning(tuning);
+          const sessionId = await getActiveSessionId();
+          if (sessionId) await updateSessionTuning(sessionId, tuning);
+        }}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -254,6 +264,7 @@ function App() {
 
         <Workspace
           activeModule={activeModule}
+          setActiveModule={setActiveModule}
           theme={theme}
           onWorkstationStatusRefresh={refreshWorkstationStatus}
         />

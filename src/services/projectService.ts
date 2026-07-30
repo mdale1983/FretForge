@@ -1,15 +1,14 @@
 import { getDatabase } from "../lib/database";
 import { Project } from "../types/project";
 import { clearAppState, getAppState, setAppState } from "./AppStateService";
-import {
-  getOrCreateSessionForProject,
-  setActiveSession,
-} from "./SessionService";
+import type { SignalChain } from "../features/signalforge/signalChainService";
 
 // Project creation
 export async function createProject(
   name: string,
-  notes = ""
+  notes = "",
+  tuning = "C# Standard",
+  signalChain: SignalChain | null = null,
 ): Promise<Project | null> {
   const db = await getDatabase();
 
@@ -17,10 +16,10 @@ export async function createProject(
 
   await db.execute(
     `
-    INSERT INTO projects (name, notes, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO projects (name, notes, tuning, signal_chain_id, rig_snapshot_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    [name, notes, now, now]
+    [name, notes, tuning, signalChain?.id ?? null, signalChain ? JSON.stringify({ source_chain_id: signalChain.id, name: signalChain.name, blocks: signalChain.blocks, notes: signalChain.notes, captured_at: now }) : null, now, now]
   );
 
   const projects = await db.select<Project[]>(
@@ -112,11 +111,9 @@ export async function setActiveProject(projectId: number) {
 
   await setAppState("active_project_id", String(projectId));
 
-  const session = await getOrCreateSessionForProject(projectId);
-
-  if (session) {
-    await setActiveSession(session.id);
-  }
+  const sessions = await db.select<{ id: number }[]>("SELECT id FROM sessions WHERE project_id = ? AND completed_at IS NULL ORDER BY updated_at DESC LIMIT 1", [projectId]);
+  if (sessions[0]) await setAppState("active_session_id", String(sessions[0].id));
+  else await clearAppState("active_session_id");
 }
 
 export async function getActiveProjectId(): Promise<number | null> {
@@ -259,6 +256,7 @@ export async function reopenProject(projectId: number) {
 
 export async function deleteProject(projectId: number) {
   const db = await getDatabase();
+  const activeProjectId = await getActiveProjectId();
 
   await db.execute(
     `
@@ -275,6 +273,12 @@ export async function deleteProject(projectId: number) {
     `,
     [projectId]
   );
+
+  if (activeProjectId === projectId) {
+    await clearAppState("active_project_id");
+    await clearAppState("active_session_id");
+    localStorage.removeItem("fretforge_workspace_state");
+  }
 }
 
 export async function renameProject(projectId: number, newName: string) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import NewProjectModal from "./NewProjectModal";
 import {
   completeProject,
@@ -13,6 +13,7 @@ import {
 } from "../services/projectService";
 import { Project } from "../types/project";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import { createSession, setActiveSession } from "../services/SessionService";
 
 type ProjectPanelProps = {
   theme: string;
@@ -33,23 +34,9 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
   const [notesValue, setNotesValue] = useState("");
   const [projectPendingDelete, setProjectPendingDelete] =
     useState<Project | null>(null);
-  const [projectQuery, setProjectQuery] = useState("");
-  const [projectSort, setProjectSort] = useState<"recent" | "name">("recent");
-
-  const visibleProjects = useMemo(() => {
-    const normalizedQuery = projectQuery.trim().toLocaleLowerCase();
-    const filteredProjects = normalizedQuery
-      ? projects.filter((project) =>
-          project.name.toLocaleLowerCase().includes(normalizedQuery)
-        )
-      : projects;
-
-    return projectSort === "name"
-      ? [...filteredProjects].sort((left, right) =>
-          left.name.localeCompare(right.name)
-        )
-      : filteredProjects;
-  }, [projectQuery, projectSort, projects]);
+  const selectedProject =
+    projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? null;
+  const projectQuery = "";
 
   useEffect(() => {
     projectAction.run(
@@ -71,7 +58,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     setCompletedProjects(loadedCompletedProjects);
   }
 
-  async function handleCreateProject(projectName: string, projectNotes: string) {
+  async function handleCreateProject(projectName: string, projectNotes: string, tuning: string, signalChain: import("../features/signalforge/signalChainService").SignalChain | null, sessionName: string, sessionNotes: string) {
     await projectAction.run(async () => {
     const trimmedName = projectName.trim();
 
@@ -86,11 +73,13 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
       return;
     }
 
-    const project = await createProject(trimmedName, projectNotes.trim());
+    const project = await createProject(trimmedName, projectNotes.trim(), tuning, signalChain);
 
     if (project) {
       await setActiveProject(project.id);
       setActiveProjectId(project.id);
+      const session = await createSession(project.id, sessionName, sessionNotes);
+      if (session) await setActiveSession(session.id);
     }
 
     setIsNewProjectOpen(false);
@@ -98,6 +87,16 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     await loadProjects();
     onProjectChanged();
     }, "The project could not be created. Please try again.");
+  }
+
+  async function handleDeleteCompletedProject(project: Project) {
+    if (!window.confirm(`Permanently delete completed project "${project.name}" and all of its sessions? This cannot be undone.`)) return;
+    await projectAction.run(async () => {
+      await deleteProject(project.id);
+      await loadCompletedProjects();
+      await loadProjects();
+      onProjectChanged();
+    }, "The completed project could not be deleted.");
   }
 
   async function handleSelectProject(projectId: number) {
@@ -160,12 +159,6 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     await projectAction.run(async () => {
     if (!projectPendingDelete) return;
 
-    if (projectPendingDelete.id === activeProjectId) {
-      alert("You cannot delete the active project. Switch projects first.");
-      setProjectPendingDelete(null);
-      return;
-    }
-
     await deleteProject(projectPendingDelete.id);
 
     setProjectPendingDelete(null);
@@ -194,7 +187,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     <>
       <div
         aria-busy={projectAction.isPending}
-        className={`flex h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
+        className={`flex h-full min-h-[420px] flex-col rounded-2xl border p-5 shadow-lg sm:p-6 ${
           theme === "dark"
             ? "border-zinc-800 bg-zinc-900/80 shadow-black/20"
             : "border-zinc-300 bg-white shadow-zinc-300/40"
@@ -243,38 +236,26 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-          <input
-            type="search"
-            value={projectQuery}
-            onChange={(event) => setProjectQuery(event.target.value)}
-            placeholder="Search projects"
-            aria-label="Search projects"
-            className={`min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:border-orange-500 ${
-              theme === "dark"
-                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                : "border-zinc-300 bg-white text-zinc-900"
-            }`}
-          />
+        <div className="mt-4">
+          <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-zinc-500">Selected Project</label>
           <select
-            value={projectSort}
-            onChange={(event) =>
-              setProjectSort(event.target.value as "recent" | "name")
-            }
-            aria-label="Sort projects"
-            className={`rounded-lg border px-3 py-2 text-sm ${
+            value={selectedProject?.id ?? ""}
+            disabled={projects.length === 0}
+            onChange={(event) => handleSelectProject(Number(event.target.value))}
+            aria-label="Select project"
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm ${
               theme === "dark"
                 ? "border-zinc-700 bg-zinc-950 text-zinc-100"
                 : "border-zinc-300 bg-white text-zinc-900"
             }`}
           >
-            <option value="recent">Recent</option>
-            <option value="name">Name</option>
+            {projects.length === 0 && <option value="">No projects available</option>}
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
         </div>
 
         <div className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {visibleProjects.length === 0 && (
+          {!selectedProject && (
             <div
               className={`rounded-xl border px-5 py-8 text-center text-sm leading-relaxed ${
                 theme === "dark"
@@ -283,18 +264,30 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
               }`}
             >
               {projects.length === 0
-                ? "No projects created yet. Create a project to begin building sessions, tones, and practice workflows."
+                ? "Please create your first project to begin."
                 : `No projects match “${projectQuery.trim()}”.`}
             </div>
           )}
 
-          {visibleProjects.map((project) => {
+          {selectedProject && [selectedProject].map((project) => {
             const isActive = project.id === activeProjectId;
+            const rigSnapshot = (() => {
+              try {
+                return project.rig_snapshot_json
+                  ? JSON.parse(project.rig_snapshot_json) as { name?: string; blocks?: { type: string; label: string; bypassed: boolean }[] }
+                  : null;
+              } catch { return null; }
+            })();
+            const pedals = rigSnapshot?.blocks?.filter(
+              (block) => !["instrument", "wireless", "interface", "daw"].includes(block.type)
+            ) ?? [];
+            const activePedals = pedals.filter((pedal) => !pedal.bypassed).map((pedal) => pedal.label);
+            const bypassedPedals = pedals.filter((pedal) => pedal.bypassed).map((pedal) => pedal.label);
 
             return (
               <div
                 key={project.id}
-                className={`flex items-start gap-2 ${
+                className={`flex h-full items-stretch gap-2 ${
                   theme === "dark" ? "text-zinc-300" : "text-zinc-700"
                 }`}
               >
@@ -304,7 +297,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                       handleSelectProject(project.id);
                     }
                   }}
-                  className={`flex-1 max-w-full overflow-hidden cursor-pointer rounded-xl border px-4 py-3 text-left text-sm transition-all duration-200 ${
+                  className={`flex min-h-[360px] flex-1 max-w-full cursor-pointer flex-col overflow-hidden rounded-xl border px-4 py-4 text-left text-sm transition-all duration-200 ${
                     isActive
                       ? "border-orange-500 bg-orange-500/10 text-orange-300 shadow-inner shadow-orange-500/10"
                       : theme === "dark"
@@ -312,7 +305,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                       : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
                   }`}
                 >
-                  <div className="flex flex-col gap-3">
+                  <div className="flex h-full flex-col gap-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         {editingProjectId === project.id ? (
@@ -354,130 +347,94 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                             >
                               {project.name}
                             </div>
-
-                            <div className="mt-1 text-xs text-zinc-500">
-                              {isActive
-                                ? "Active Project"
-                                : `Last Opened: ${new Date(
-                                    project.updated_at
-                                  ).toLocaleDateString()}`}
-                            </div>
                           </>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 self-start pt-1">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            startRenamingProject(project.id, project.name);
-                          }}
-                          className="text-xs opacity-70 hover:opacity-100"
-                        >
-                          Rename
-                        </button>
+                    </div>
 
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setEditingNotesProjectId(project.id);
-                            setNotesValue(project.notes ?? "");
-                          }}
-                          className="text-xs text-blue-300 opacity-70 hover:opacity-100"
-                        >
-                          Edit Notes
-                        </button>
-
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleCompleteProject(project);
-                          }}
-                          className="text-xs text-emerald-300 opacity-70 hover:opacity-100"
-                        >
-                          Complete
-                        </button>
-
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setProjectPendingDelete(project);
-                          }}
-                          className="text-xs text-red-400 opacity-70 hover:opacity-100"
-                        >
-                          Delete
-                        </button>
+                    <div className={`grid gap-3 rounded-xl border p-4 ${
+                      theme === "dark"
+                        ? "border-orange-500/30 bg-orange-500/5"
+                        : "border-orange-300 bg-orange-50"
+                    }`}>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Tuning</div>
+                          <div className="mt-1 font-medium">{project.tuning || "C# Standard"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Pedalboard</div>
+                          <div className="mt-1 font-medium">{rigSnapshot?.name || "Not assigned"}</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Active Pedals</div>
+                        <div className="mt-1 leading-relaxed">{activePedals.join(", ") || "None"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Bypassed Pedals</div>
+                        <div className="mt-1 leading-relaxed">{bypassedPedals.join(", ") || "None"}</div>
                       </div>
                     </div>
 
-                    {editingNotesProjectId === project.id ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={notesValue}
-                          maxLength={250}
-                          autoFocus
-                          onChange={(event) => setNotesValue(event.target.value)}
-                          onClick={(event) => event.stopPropagation()}
-                          rows={4}
-                          className={`w-full resize-none rounded-md border px-3 py-2 text-xs outline-none ${
-                            theme === "dark"
-                              ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                              : "border-zinc-300 bg-white text-zinc-900"
-                          }`}
-                        />
-
-                        <div
-                          className={`text-right text-xs ${
-                            theme === "dark" ? "text-zinc-500" : "text-zinc-600"
-                          }`}
-                        >
-                          {notesValue.length} / 250 characters
+                    <div className="flex min-h-[110px] flex-1 flex-col">
+                      <div className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-500">Notes</div>
+                      {editingNotesProjectId === project.id ? (
+                        <div className="flex min-h-0 flex-1 flex-col gap-2">
+                          <textarea value={notesValue} maxLength={250} autoFocus onChange={(event) => setNotesValue(event.target.value)} onClick={(event) => event.stopPropagation()} className={`min-h-[80px] w-full flex-1 resize-none rounded-md border px-3 py-2 text-xs outline-none ${theme === "dark" ? "border-zinc-700 bg-zinc-950 text-zinc-100" : "border-zinc-300 bg-white text-zinc-900"}`} />
+                          <div className="text-right text-xs text-zinc-500">{notesValue.length} / 250 characters</div>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={(event) => { event.stopPropagation(); handleSaveProjectNotes(project.id); }} className="rounded-md border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10">Save Notes</button>
+                            <button type="button" onClick={(event) => { event.stopPropagation(); setEditingNotesProjectId(null); setNotesValue(""); }} className="rounded-md border border-zinc-600 px-3 py-1 text-xs font-medium hover:bg-zinc-500/10">Cancel</button>
+                          </div>
                         </div>
+                      ) : (
+                        <div className={`min-h-[80px] flex-1 overflow-y-auto rounded-md border px-3 py-3 text-xs leading-relaxed break-words ${theme === "dark" ? "border-zinc-800 bg-zinc-950 text-zinc-400" : "border-zinc-300 bg-zinc-50 text-zinc-600"}`}>{project.notes?.trim() || "No project notes yet."}</div>
+                      )}
+                    </div>
 
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleSaveProjectNotes(project.id);
-                            }}
-                            className={`rounded-md border px-3 py-1 text-xs font-medium ${
-                              theme === "dark"
-                                ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
-                                : "border-emerald-400 text-emerald-700 hover:bg-emerald-50"
-                            }`}
-                          >
-                            Save Notes
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setEditingNotesProjectId(null);
-                              setNotesValue("");
-                            }}
-                            className={`rounded-md border px-3 py-1 text-xs font-medium ${
-                              theme === "dark"
-                                ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800"
-                                : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
-                            }`}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className={`max-w-full overflow-hidden rounded-md border px-3 py-2 text-xs leading-relaxed break-words ${
-                          theme === "dark"
-                            ? "border-zinc-800 bg-zinc-950 text-zinc-400"
-                            : "border-zinc-300 bg-zinc-50 text-zinc-600"
-                        }`}
+                    <div className={`mt-auto grid grid-cols-4 items-center gap-1.5 border-t pt-4 ${
+                      theme === "dark" ? "border-zinc-800" : "border-zinc-300"
+                    }`}>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startRenamingProject(project.id, project.name);
+                        }}
+                        className="whitespace-nowrap rounded-md border border-zinc-600 px-2 py-1.5 text-[11px] hover:bg-zinc-500/10"
                       >
-                        {project.notes?.trim() || "No project notes yet."}
-                      </div>
-                    )}
+                        Rename
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setEditingNotesProjectId(project.id);
+                          setNotesValue(project.notes ?? "");
+                        }}
+                        className="whitespace-nowrap rounded-md border border-blue-500/50 px-2 py-1.5 text-[11px] text-blue-300 hover:bg-blue-500/10"
+                      >
+                        Edit Notes
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleCompleteProject(project);
+                        }}
+                        className="whitespace-nowrap rounded-md border border-emerald-500/50 px-2 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                      >
+                        Complete
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setProjectPendingDelete(project);
+                        }}
+                        className="whitespace-nowrap rounded-md border border-red-500/50 px-2 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -595,6 +552,9 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                           {project.notes.trim()}
                         </div>
                       )}
+                      <div className="mt-3 flex justify-end">
+                        <button type="button" onClick={() => handleDeleteCompletedProject(project)} className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete Permanently</button>
+                      </div>
                     </div>
                   ))
                 )}

@@ -9,27 +9,37 @@ import type { SignalChain } from "../features/signalforge/signalChainService";
 export type { Session };
 
 // Session creation and discovery
-export async function createSession(projectId: number) {
+export async function createSession(projectId: number, name?: string, notes = "") {
   const db = await getDatabase();
   const now = new Date().toISOString();
+  const projects = await db.select<{ tuning?: string | null; signal_chain_id?: number | null; rig_snapshot_json?: string | null }[]>("SELECT tuning, signal_chain_id, rig_snapshot_json FROM projects WHERE id = ? LIMIT 1", [projectId]);
+  const projectSetup = projects[0];
 
   await db.execute(
     `
     INSERT INTO sessions (
       project_id,
       name,
+      notes,
       created_at,
       updated_at,
-      active_workspace
+      active_workspace,
+      tuning,
+      signal_chain_id,
+      rig_snapshot_json
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       projectId,
-      `Practice Session ${new Date().toLocaleDateString()}`,
+      name?.trim() || `Practice Session ${new Date().toLocaleDateString()}`,
+      notes.trim(),
       now,
       now,
       "forge",
+      projectSetup?.tuning ?? "C# Standard",
+      projectSetup?.signal_chain_id ?? null,
+      projectSetup?.rig_snapshot_json ?? null,
     ]
   );
 
@@ -268,11 +278,8 @@ export async function completeSession(sessionId: number) {
         session.project_id,
         sessionId
       );
-      const nextSession =
-        fallbackSession ?? (await createRecoverySession(session.project_id));
-
-      if (nextSession) {
-        await setActiveSession(nextSession.id);
+      if (fallbackSession) {
+        await setActiveSession(fallbackSession.id);
       } else {
         await clearAppState("active_session_id");
       }
@@ -300,12 +307,8 @@ export async function reopenSession(sessionId: number) {
 
 export async function deleteSession(sessionId: number) {
   const activeSessionId = await getActiveSessionId();
-
-  if (activeSessionId === sessionId) {
-    throw new Error("Cannot delete the active session.");
-  }
-
   const db = await getDatabase();
+  const session = await getSessionById(sessionId);
 
   await db.execute(
     `
@@ -319,6 +322,12 @@ export async function deleteSession(sessionId: number) {
 
   if (workspaceState?.activeSessionId === sessionId) {
     await clearWorkspaceState();
+  }
+
+  if (activeSessionId === sessionId) {
+    const fallback = session ? await getNextAvailableSessionForProject(session.project_id, sessionId) : null;
+    if (fallback) await setActiveSession(fallback.id);
+    else await clearAppState("active_session_id");
   }
 }
 
@@ -341,7 +350,7 @@ export async function deleteInactiveSessionsForProject(projectId: number) {
   );
 }
 
-// Session counts and recovery safeguards
+// Session counts and selection safeguards
 export async function getSessionCountForProject(
   projectId: number
 ): Promise<number> {
@@ -358,43 +367,6 @@ export async function getSessionCountForProject(
   );
 
   return result[0]?.count ?? 0;
-}
-
-export async function createRecoverySession(projectId: number) {
-  const db = await getDatabase();
-  const now = new Date().toISOString();
-
-  await db.execute(
-    `
-    INSERT INTO sessions (
-      project_id,
-      name,
-      created_at,
-      updated_at,
-      active_workspace
-    )
-    VALUES (?, ?, ?, ?, ?)
-    `,
-    [
-      projectId,
-      `Recovery Session ${new Date().toLocaleString()}`,
-      now,
-      now,
-      "forge",
-    ]
-  );
-
-  return await getMostRecentSessionForProject(projectId);
-}
-
-export async function createFallbackSessionIfNeeded(projectId: number) {
-  const sessionCount = await getSessionCountForProject(projectId);
-
-  if (sessionCount > 0) {
-    return;
-  }
-
-  await createRecoverySession(projectId);
 }
 
 export async function getNextAvailableSessionForProject(
@@ -452,30 +424,6 @@ export async function updateSessionNotes(sessionId: number, notes: string) {
   );
 }
 
-// Preserve an active session before deleting the current one
-export async function switchToFallbackSessionBeforeDelete(
-  projectId: number,
-  sessionIdToDelete: number
-) {
-  const fallbackSession = await getNextAvailableSessionForProject(
-    projectId,
-    sessionIdToDelete
-  );
-
-  if (fallbackSession) {
-    await setActiveSession(fallbackSession.id);
-    return fallbackSession;
-  }
-
-  const recoverySession = await createRecoverySession(projectId);
-
-  if (recoverySession) {
-    await setActiveSession(recoverySession.id);
-  }
-
-  return recoverySession;
-}
-
 export async function assignSignalChainToSession(
   sessionId: number,
   signalChain: SignalChain | null,
@@ -499,5 +447,13 @@ export async function assignSignalChainToSession(
     WHERE id = ?
     `,
     [signalChain?.id ?? null, snapshot, now, sessionId]
+  );
+}
+
+export async function updateSessionTuning(sessionId: number, tuning: string) {
+  const db = await getDatabase();
+  await db.execute(
+    "UPDATE sessions SET tuning = ?, updated_at = ? WHERE id = ?",
+    [tuning, new Date().toISOString(), sessionId]
   );
 }
