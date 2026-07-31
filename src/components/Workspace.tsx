@@ -134,6 +134,12 @@ function Workspace({
     loadCurrentProject();
   }, []);
 
+  useEffect(() => {
+    const refreshProjects = () => { loadCurrentProject(); };
+    window.addEventListener("fretforge:projects-changed", refreshProjects);
+    return () => window.removeEventListener("fretforge:projects-changed", refreshProjects);
+  }, []);
+
   const currentModule =
     modules.find((module) => module.id === activeModule) ?? modules[0];
 

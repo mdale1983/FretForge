@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import NewProjectModal from "./NewProjectModal";
+import EditProjectModal from "./EditProjectModal";
 import {
   completeProject,
   getCompletedProjects,
@@ -8,8 +9,10 @@ import {
   getActiveProjectId,
   getProjects,
   renameProject,
+  reopenProject,
   setActiveProject,
   updateProjectNotes,
+  updateProjectSettings,
 } from "../services/projectService";
 import { Project } from "../types/project";
 import { useAsyncAction } from "../hooks/useAsyncAction";
@@ -23,6 +26,7 @@ type ProjectPanelProps = {
 function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
   const projectAction = useAsyncAction();
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [projectBeingEdited, setProjectBeingEdited] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
@@ -99,17 +103,35 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
     }, "The completed project could not be deleted.");
   }
 
+  async function handleReopenProject(project: Project) {
+    await projectAction.run(async () => {
+      await reopenProject(project.id);
+      await setActiveProject(project.id);
+      setIsCompletedProjectsOpen(false);
+      await loadCompletedProjects();
+      await loadProjects();
+      onProjectChanged();
+    }, "The completed project could not be reopened.");
+  }
+
+  async function handleUpdateProject(name: string, notes: string, tuning: string, signalChain: import("../features/signalforge/signalChainService").SignalChain | null) {
+    if (!projectBeingEdited) return;
+    const duplicate = projects.some((project) => project.id !== projectBeingEdited.id && project.name.toLowerCase() === name.trim().toLowerCase());
+    if (duplicate) { window.alert("A project with that name already exists."); return; }
+    await projectAction.run(async () => {
+      await updateProjectSettings(projectBeingEdited.id, name, notes, tuning, signalChain);
+      setProjectBeingEdited(null);
+      await loadProjects();
+      onProjectChanged();
+    }, "The project settings could not be saved.");
+  }
+
   async function handleSelectProject(projectId: number) {
     await projectAction.run(async () => {
     await setActiveProject(projectId);
     await loadProjects();
     onProjectChanged();
     }, "The active project could not be changed.");
-  }
-
-  function startRenamingProject(projectId: number, projectName: string) {
-    setEditingProjectId(projectId);
-    setEditingProjectName(projectName);
   }
 
   async function saveRenamedProject(projectId: number) {
@@ -394,27 +416,17 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                       )}
                     </div>
 
-                    <div className={`mt-auto grid grid-cols-4 items-center gap-1.5 border-t pt-4 ${
+                    <div className={`mt-auto grid grid-cols-3 items-center gap-1.5 border-t pt-4 ${
                       theme === "dark" ? "border-zinc-800" : "border-zinc-300"
                     }`}>
                       <button
                         onClick={(event) => {
                           event.stopPropagation();
-                          startRenamingProject(project.id, project.name);
-                        }}
-                        className="whitespace-nowrap rounded-md border border-zinc-600 px-2 py-1.5 text-[11px] hover:bg-zinc-500/10"
-                      >
-                        Rename
-                      </button>
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setEditingNotesProjectId(project.id);
-                          setNotesValue(project.notes ?? "");
+                          setProjectBeingEdited(project);
                         }}
                         className="whitespace-nowrap rounded-md border border-blue-500/50 px-2 py-1.5 text-[11px] text-blue-300 hover:bg-blue-500/10"
                       >
-                        Edit Notes
+                        Edit Project
                       </button>
                       <button
                         onClick={(event) => {
@@ -488,6 +500,7 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
           </div>
         </div>
       )}
+      {projectBeingEdited && <EditProjectModal project={projectBeingEdited} theme={theme} onClose={() => setProjectBeingEdited(null)} onSave={handleUpdateProject} />}
         {isCompletedProjectsOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div
@@ -552,7 +565,12 @@ function ProjectPanel({ theme, onProjectChanged }: ProjectPanelProps) {
                           {project.notes.trim()}
                         </div>
                       )}
-                      <div className="mt-3 flex justify-end">
+                      <div className={`mt-3 grid gap-2 rounded-lg border p-3 text-xs ${theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-zinc-300 bg-white"}`}>
+                        <div><span className="text-zinc-500">Tuning:</span> {project.tuning || "C# Standard"}</div>
+                        <div><span className="text-zinc-500">Pedalboard:</span> {(() => { try { return project.rig_snapshot_json ? JSON.parse(project.rig_snapshot_json).name || "Not assigned" : "Not assigned"; } catch { return "Not assigned"; } })()}</div>
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button type="button" onClick={() => handleReopenProject(project)} className="rounded-md border border-emerald-500/50 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10">Reopen Project</button>
                         <button type="button" onClick={() => handleDeleteCompletedProject(project)} className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete Permanently</button>
                       </div>
                     </div>

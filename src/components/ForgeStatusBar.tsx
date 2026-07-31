@@ -12,8 +12,8 @@ type ForgeStatusBarProps = {
   }[];
   selectedAudioDevice: string;
   setSelectedAudioDevice: (device: string) => void;
-  sessionTuning: string;
-  onSessionTuningChange: (tuning: string) => Promise<void>;
+  projectTuning: string;
+  onProjectTuningChange: (tuning: string) => Promise<void>;
 };
 
 type TuningOption = {
@@ -70,8 +70,8 @@ function ForgeStatusBar({
   theme,
   setTheme,
   workstationStatus,
-  sessionTuning,
-  onSessionTuningChange,
+  projectTuning,
+  onProjectTuningChange,
 }: ForgeStatusBarProps) {
   const [stringCount, setStringCount] = useState<6 | 7 | 8>(6);
   const [selectedTuning, setSelectedTuning] = useState<TuningOption>(
@@ -83,11 +83,11 @@ function ForgeStatusBar({
   );
 
   useEffect(() => {
-    const tuning = tuningOptions.find((option) => option.name === sessionTuning);
+    const tuning = tuningOptions.find((option) => option.name === projectTuning);
     if (!tuning || tuning.name === selectedTuning.name) return;
     setStringCount(tuning.stringCount);
     setSelectedTuning(tuning);
-  }, [sessionTuning, selectedTuning.name]);
+  }, [projectTuning, selectedTuning.name]);
 
   const changeMonitorRoute = (route: string) => {
     setMonitorRoute(route);
@@ -307,6 +307,7 @@ function ForgeStatusBar({
 
                   setStringCount(nextStringCount);
                   setSelectedTuning(nextTuning);
+                  onProjectTuningChange(nextTuning.name);
                 }}
                 className={`rounded-md border px-2 py-1 text-xs outline-none ${selectClass}`}
               >
@@ -331,7 +332,7 @@ function ForgeStatusBar({
 
                   if (tuning) {
                     setSelectedTuning(tuning);
-                    onSessionTuningChange(tuning.name);
+                    onProjectTuningChange(tuning.name);
                   }
                 }}
                 className={`rounded-md border px-2 py-1 text-xs outline-none ${selectClass}`}

@@ -237,6 +237,41 @@ export async function completeProject(projectId: number) {
   }
 }
 
+export async function updateProjectSettings(
+  projectId: number,
+  name: string,
+  notes: string,
+  tuning: string,
+  signalChain: SignalChain | null,
+) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const snapshot = signalChain
+    ? JSON.stringify({
+        source_chain_id: signalChain.id,
+        name: signalChain.name,
+        blocks: signalChain.blocks,
+        notes: signalChain.notes,
+        captured_at: now,
+      })
+    : null;
+
+  await db.execute(
+    `UPDATE projects
+     SET name = ?, notes = ?, tuning = ?, signal_chain_id = ?, rig_snapshot_json = ?, updated_at = ?
+     WHERE id = ? AND completed_at IS NULL`,
+    [name.trim(), notes.trim(), tuning, signalChain?.id ?? null, snapshot, now, projectId]
+  );
+}
+
+export async function updateProjectTuning(projectId: number, tuning: string) {
+  const db = await getDatabase();
+  await db.execute(
+    "UPDATE projects SET tuning = ?, updated_at = ? WHERE id = ? AND completed_at IS NULL",
+    [tuning, new Date().toISOString(), projectId]
+  );
+}
+
 export async function reopenProject(projectId: number) {
   const db = await getDatabase();
 

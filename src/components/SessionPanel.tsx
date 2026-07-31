@@ -11,6 +11,7 @@ import {
   getActiveSessionId,
   getSessionsForProject,
   renameSession,
+  reopenSession,
   setActiveSession,
   updateSessionNotes,
   type Session,
@@ -160,6 +161,26 @@ function SessionPanel({
     await loadSessions();
     await onWorkstationStatusRefresh();
     }, "The session could not be completed.");
+  }
+
+  async function handleReopenSession(session: Session) {
+    await sessionAction.run(async () => {
+      await reopenSession(session.id);
+      await setActiveSession(session.id);
+      setIsCompletedSessionsOpen(false);
+      await loadCompletedSessions();
+      await loadSessions();
+      await onWorkstationStatusRefresh();
+    }, "The completed session could not be reopened.");
+  }
+
+  async function handleDeleteCompletedSession(session: Session) {
+    if (!window.confirm(`Permanently delete completed session "${session.name}"? This cannot be undone.`)) return;
+    await sessionAction.run(async () => {
+      await deleteSession(session.id);
+      await loadCompletedSessions();
+      await onWorkstationStatusRefresh();
+    }, "The completed session could not be deleted.");
   }
 
   useEffect(() => {
@@ -557,6 +578,10 @@ function SessionPanel({
                         {session.notes.trim()}
                       </div>
                     )}
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button type="button" onClick={() => handleReopenSession(session)} className="rounded-md border border-emerald-500/50 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10">Reopen Session</button>
+                      <button type="button" onClick={() => handleDeleteCompletedSession(session)} className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete Permanently</button>
+                    </div>
                   </div>
                 ))
               )}
