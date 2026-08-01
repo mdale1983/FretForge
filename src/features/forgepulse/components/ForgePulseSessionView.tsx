@@ -4,6 +4,7 @@ import type {
   TimeSignature,
   TransportStatus,
 } from "../forgePulseTypes";
+import type { TimingCoachState } from "../hooks/useTimingCoach";
 
 type ForgePulseSessionViewProps = {
   theme: string;
@@ -17,6 +18,13 @@ type ForgePulseSessionViewProps = {
   elapsedSeconds: number;
   timerEnabled: boolean;
   durationMinutes: number;
+  timingCoach: TimingCoachState;
+  dawName: string;
+  dawInstalled: boolean;
+  dawRunning: boolean;
+  isLaunchingDaw: boolean;
+  dawLaunchError: string;
+  onLaunchDaw: () => void;
   onBack: () => void;
   start: () => void;
   stop: () => void;
@@ -40,6 +48,13 @@ export function ForgePulseSessionView({
   elapsedSeconds,
   timerEnabled,
   durationMinutes,
+  timingCoach,
+  dawName,
+  dawInstalled,
+  dawRunning,
+  isLaunchingDaw,
+  dawLaunchError,
+  onLaunchDaw,
   onBack,
   start,
   stop,
@@ -84,6 +99,79 @@ export function ForgePulseSessionView({
             {formatDuration(timerEnabled ? remainingSeconds : elapsedSeconds)}
           </p>
         </div>
+      </div>
+
+      <div className={`mt-4 rounded-xl border p-4 ${
+        timingCoach.connected
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-amber-500/30 bg-amber-500/5"
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Guitar Timing</p>
+            <p className="mt-1 text-sm font-semibold">
+              {timingCoach.connected
+                ? `Listening via ${timingCoach.sourceName || "FretForge Link"}`
+                : "Waiting for FretForge Link"}
+            </p>
+          </div>
+          {timingCoach.connected && timingCoach.latestJudgement && (
+            <p className={`text-lg font-semibold ${
+              timingCoach.latestJudgement === "in-time" ? "text-emerald-400" : "text-orange-400"
+            }`}>
+              {timingCoach.calibrating
+                ? "Calibrating…"
+                : timingCoach.latestJudgement === "in-time"
+                  ? "In time"
+                  : `${timingCoach.latestJudgement === "early" ? "Early" : "Late"} ${Math.abs(timingCoach.latestOffsetMs ?? 0)} ms`}
+            </p>
+          )}
+        </div>
+
+        {!timingCoach.connected ? (
+          <div className="mt-3">
+            <p className="text-sm text-zinc-300">
+              ForgePulse analyzes your guitar through FretForge Link. {dawName} must be running with the guitar track armed, monitoring enabled, and FretForge Link active on the guitar bus.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${dawRunning ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-800 text-zinc-400"}`}>
+                {dawName}: {dawRunning ? "Running" : "Closed"}
+              </span>
+              <button
+                type="button"
+                onClick={onLaunchDaw}
+                disabled={!dawInstalled || dawRunning || isLaunchingDaw}
+                className="rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLaunchingDaw ? `Launching ${dawName}…` : dawRunning ? `${dawName} is Running` : `Launch ${dawName}`}
+              </button>
+              {!dawInstalled && <span className="text-xs text-amber-400">Select and install a DAW in Studio Path first.</span>}
+            </div>
+            {dawRunning && (
+              <p className="mt-3 text-xs text-amber-300">DAW detected. Waiting for audio from FretForge Link—check track arming, monitoring, bus routing, and plug-in bypass.</p>
+            )}
+            {dawLaunchError && <p className="mt-3 text-sm text-red-400" role="alert">{dawLaunchError}</p>}
+          </div>
+        ) : (
+          <div className="mt-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-500">Guitar input</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                <div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${timingCoach.inputLevel}%` }} />
+              </div>
+              <span className="w-10 text-right text-xs tabular-nums text-zinc-500">{timingCoach.inputLevel}%</span>
+            </div>
+            {status === "idle" && (
+              <p className="mt-3 text-sm text-zinc-400">Pluck a string to verify the input meter, then start the metronome for scored timing feedback.</p>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Metric label="Detected" value={timingCoach.attackCount} />
+              <Metric label="Avg. error" value={`${timingCoach.averageErrorMs} ms`} />
+              <Metric label="Consistency" value={`${timingCoach.consistencyMs} ms`} />
+              <Metric label="Missed / Extra" value={`${timingCoach.missedCount} / ${timingCoach.extraCount}`} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-5 text-center">
@@ -156,6 +244,15 @@ export function ForgePulseSessionView({
       <p className="mt-3 text-xs text-zinc-500">
         Press Space to start or stop while focus is outside a control.
       </p>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-zinc-700/60 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 font-semibold tabular-nums">{value}</p>
     </div>
   );
 }

@@ -10,6 +10,10 @@ export interface Session {
   signal_chain_id?: number | null;
   rig_snapshot_json?: string | null;
   tuning?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  duration_seconds?: number | null;
+  modules_used_json?: string | null;
 }
 
 export interface SessionWorkspaceState {

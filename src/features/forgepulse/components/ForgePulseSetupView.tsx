@@ -131,9 +131,11 @@ export function ForgePulseSetupView({
                     onSubdivisionChange(event.target.value as Subdivision)
                 }
                 >
+                <option value="whole">Whole Notes</option>
+                <option value="half">Half Notes</option>
                 <option value="quarter">Quarter Notes</option>
                 <option value="eighth">Eighth Notes</option>
-                <option value="triplet">Triplets</option>
+                <option value="triplet">Eighth-Note Triplets</option>
                 <option value="sixteenth">Sixteenth Notes</option>
                 </select>
             </div>

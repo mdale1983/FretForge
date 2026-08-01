@@ -138,6 +138,7 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
                 {
                     const auto writeIndex = mAnalysisWriteIndex.fetch_add (1, std::memory_order_relaxed);
                     mAnalysisSamples[writeIndex % mAnalysisSamples.size ()].store (value, std::memory_order_relaxed);
+					processAttackSample (value);
                 }
                 if (channel < inputChannels)
                 {
@@ -162,6 +163,7 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
                 {
                     const auto writeIndex = mAnalysisWriteIndex.fetch_add (1, std::memory_order_relaxed);
                     mAnalysisSamples[writeIndex % mAnalysisSamples.size ()].store (static_cast<float> (value), std::memory_order_relaxed);
+					processAttackSample (static_cast<float> (value));
                 }
                 if (channel < inputChannels)
                 {
@@ -199,6 +201,29 @@ tresult PLUGIN_API HelloWorldProcessor::canProcessSampleSize (int32 symbolicSamp
 		return kResultTrue;
 
 	return kResultFalse;
+}
+
+void HelloWorldProcessor::processAttackSample (float sample)
+{
+	const auto absolute = std::abs (sample);
+	const auto sampleRate = std::max (1.0, mSampleRate.load (std::memory_order_relaxed));
+	const auto processed = mProcessedSamples.fetch_add (1, std::memory_order_relaxed) + 1;
+	++mSamplesSinceAttack;
+	const auto previousEnvelope = mAttackEnvelope;
+	const auto coefficient = absolute > mAttackEnvelope ? 0.18f : 0.0025f;
+	mAttackEnvelope += coefficient * (absolute - mAttackEnvelope);
+	if (mAttackEnvelope < 0.04f)
+		mNoiseFloor += 0.00015f * (mAttackEnvelope - mNoiseFloor);
+	const auto threshold = std::max (0.012f, mNoiseFloor * 5.0f);
+	const auto refractorySamples = static_cast<uint64_t> (sampleRate * 0.055);
+	const bool sharpRise = mAttackEnvelope > threshold && mAttackEnvelope > previousEnvelope * 1.12f;
+	if (!sharpRise || mSamplesSinceAttack < refractorySamples)
+		return;
+	mSamplesSinceAttack = 0;
+	const auto sequence = mAttackSequence.fetch_add (1, std::memory_order_relaxed) + 1;
+	const auto slot = sequence % mAttackSampleIndices.size ();
+	mAttackSampleIndices[slot].store (processed, std::memory_order_release);
+	mAttackStrengths[slot].store (mAttackEnvelope, std::memory_order_release);
 }
 
 tresult PLUGIN_API HelloWorldProcessor::notify (Vst::IMessage* message)
@@ -315,7 +340,26 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 		<< ",\"input_rms\":" << mInputRms.load (std::memory_order_relaxed)
 		<< ",\"input_peak\":" << mInputPeak.load (std::memory_order_relaxed)
 		<< ",\"frequency\":" << mFrequency.load (std::memory_order_relaxed)
-		<< ",\"clarity\":" << mClarity.load (std::memory_order_relaxed)
+		<< ",\"clarity\":" << mClarity.load (std::memory_order_relaxed);
+	const auto latestSequence = mAttackSequence.load (std::memory_order_acquire);
+	const auto processedSamples = mProcessedSamples.load (std::memory_order_acquire);
+	const auto sampleRate = std::max (1.0, mSampleRate.load (std::memory_order_relaxed));
+	output << ",\"attacks\":[";
+	const auto firstSequence = latestSequence > mAttackSampleIndices.size () ? latestSequence - mAttackSampleIndices.size () + 1 : 1;
+	bool firstAttack = true;
+	for (uint64_t sequence = firstSequence; sequence <= latestSequence; ++sequence)
+	{
+		const auto slot = sequence % mAttackSampleIndices.size ();
+		const auto attackSample = mAttackSampleIndices[slot].load (std::memory_order_acquire);
+		if (attackSample == 0 || attackSample > processedSamples) continue;
+		const auto ageMilliseconds = static_cast<int64_t> ((processedSamples - attackSample) * 1000.0 / sampleRate);
+		if (!firstAttack) output << ',';
+		firstAttack = false;
+		output << "{\"sequence\":" << sequence
+			<< ",\"timestamp_ms\":" << (timestamp - ageMilliseconds)
+			<< ",\"strength\":" << mAttackStrengths[slot].load (std::memory_order_relaxed) << '}';
+	}
+	output << ']'
 		<< ",\"plugin_version\":\"0.1.0\"}";
 #endif
 }

@@ -55,6 +55,6 @@ export const subdivisionLabels: Record<Subdivision, string> = {
   half: "HALF NOTES",
   quarter: "QUARTER NOTES",
   eighth: "EIGHTH NOTES",
-  triplet: "TRIPLETS",
+  triplet: "EIGHTH-NOTE TRIPLETS",
   sixteenth: "SIXTEENTH NOTES",
 };

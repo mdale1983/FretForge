@@ -11,6 +11,7 @@ import {
   loadWorkspaceState,
   getSessionCountForProject,
   getSessionById,
+  recordSessionModule,
 } from "./services/SessionService";
 import ForgeStatusBar from "./components/ForgeStatusBar";
 import LeftRail from "./components/LeftRail";
@@ -183,6 +184,7 @@ function App() {
       if (!sessionId) return;
 
       await setSessionWorkspace(sessionId, activeModule);
+      await recordSessionModule(sessionId, activeModule);
       await saveCurrentWorkspaceState();
     }
 

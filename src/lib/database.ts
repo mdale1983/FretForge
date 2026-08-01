@@ -77,6 +77,10 @@ export async function initializeDatabase() {
   await addColumnIfMissing(database, "sessions", "signal_chain_id", "INTEGER");
   await addColumnIfMissing(database, "sessions", "rig_snapshot_json", "TEXT");
   await addColumnIfMissing(database, "sessions", "tuning", "TEXT NOT NULL DEFAULT 'C# Standard'");
+  await addColumnIfMissing(database, "sessions", "started_at", "TEXT");
+  await addColumnIfMissing(database, "sessions", "ended_at", "TEXT");
+  await addColumnIfMissing(database, "sessions", "duration_seconds", "INTEGER NOT NULL DEFAULT 0");
+  await addColumnIfMissing(database, "sessions", "modules_used_json", "TEXT NOT NULL DEFAULT '[]'");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS forgepulse_runs (
@@ -90,6 +94,17 @@ export async function initializeDatabase() {
       duration_seconds INTEGER NOT NULL,
       completed_at TEXT NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id),
+      FOREIGN KEY(session_id) REFERENCES sessions(id)
+    );
+  `);
+
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS session_tuner_stats (
+      session_id INTEGER PRIMARY KEY,
+      active_started_at TEXT,
+      total_seconds INTEGER NOT NULL DEFAULT 0,
+      tuned_notes_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL,
       FOREIGN KEY(session_id) REFERENCES sessions(id)
     );
   `);

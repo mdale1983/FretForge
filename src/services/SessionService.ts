@@ -259,6 +259,10 @@ export async function completeSession(sessionId: number) {
   const activeSessionId = await getActiveSessionId();
   const session = await getSessionById(sessionId);
 
+  if (session?.started_at && !session.ended_at) {
+    await endSession(sessionId);
+  }
+
   await db.execute(
     `
     UPDATE sessions
@@ -287,6 +291,140 @@ export async function completeSession(sessionId: number) {
       await clearAppState("active_session_id");
     }
   }
+}
+
+export async function startSession(sessionId: number) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const running = await db.select<{ id: number }[]>(
+    "SELECT id FROM sessions WHERE started_at IS NOT NULL AND ended_at IS NULL AND completed_at IS NULL AND id != ? LIMIT 1",
+    [sessionId]
+  );
+  if (running.length > 0) throw new Error("End the currently running session before starting another one.");
+  await db.execute(
+    `UPDATE sessions SET started_at = ?, ended_at = NULL, duration_seconds = 0, modules_used_json = '[]', updated_at = ?
+     WHERE id = ? AND completed_at IS NULL`,
+    [now, now, sessionId]
+  );
+}
+
+export async function endSession(sessionId: number) {
+  await stopSessionTunerActivity();
+  const db = await getDatabase();
+  const session = await getSessionById(sessionId);
+  if (!session?.started_at || session.ended_at) return;
+  const endedAt = new Date();
+  const durationSeconds = Math.max(0, Math.floor((endedAt.getTime() - new Date(session.started_at).getTime()) / 1000));
+  await db.execute(
+    "UPDATE sessions SET ended_at = ?, duration_seconds = ?, updated_at = ? WHERE id = ?",
+    [endedAt.toISOString(), durationSeconds, endedAt.toISOString(), sessionId]
+  );
+}
+
+export async function recordSessionModule(sessionId: number, moduleId: string) {
+  const db = await getDatabase();
+  const session = await getSessionById(sessionId);
+  if (!session?.started_at || session.ended_at || session.completed_at) return;
+  let modules: string[] = [];
+  try { modules = session.modules_used_json ? JSON.parse(session.modules_used_json) : []; } catch { modules = []; }
+  if (modules.includes(moduleId)) return;
+  modules.push(moduleId);
+  await db.execute(
+    "UPDATE sessions SET modules_used_json = ?, updated_at = ? WHERE id = ?",
+    [JSON.stringify(modules), new Date().toISOString(), sessionId]
+  );
+}
+
+export type SessionPracticeSummary = {
+  forgePulseRunCount: number;
+  forgePulseSeconds: number;
+  minimumBpm: number | null;
+  maximumBpm: number | null;
+  subdivisions: string[];
+  tunerSeconds: number;
+  tunedNotes: string[];
+};
+
+export async function getSessionPracticeSummary(sessionId: number): Promise<SessionPracticeSummary> {
+  const db = await getDatabase();
+  const pulse = await db.select<{ run_count: number; total_seconds: number; minimum_bpm: number | null; maximum_bpm: number | null; subdivisions: string | null }[]>(
+    `SELECT COUNT(*) run_count, COALESCE(SUM(duration_seconds), 0) total_seconds,
+            MIN(bpm) minimum_bpm, MAX(bpm) maximum_bpm,
+            GROUP_CONCAT(DISTINCT subdivision) subdivisions
+     FROM forgepulse_runs WHERE session_id = ?`, [sessionId]
+  );
+  const tuner = await db.select<{ total_seconds: number; active_started_at: string | null; tuned_notes_json: string }[]>(
+    "SELECT total_seconds, active_started_at, tuned_notes_json FROM session_tuner_stats WHERE session_id = ?", [sessionId]
+  );
+  const tunerRow = tuner[0];
+  let tunedNotes: string[] = [];
+  try { tunedNotes = tunerRow?.tuned_notes_json ? JSON.parse(tunerRow.tuned_notes_json) : []; } catch { tunedNotes = []; }
+  const activeSeconds = tunerRow?.active_started_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(tunerRow.active_started_at).getTime()) / 1000))
+    : 0;
+  return {
+    forgePulseRunCount: pulse[0]?.run_count ?? 0,
+    forgePulseSeconds: pulse[0]?.total_seconds ?? 0,
+    minimumBpm: pulse[0]?.minimum_bpm ?? null,
+    maximumBpm: pulse[0]?.maximum_bpm ?? null,
+    subdivisions: pulse[0]?.subdivisions?.split(",").filter(Boolean) ?? [],
+    tunerSeconds: (tunerRow?.total_seconds ?? 0) + activeSeconds,
+    tunedNotes,
+  };
+}
+
+async function activeRunningSessionId() {
+  const sessionId = await getActiveSessionId();
+  if (!sessionId) return null;
+  const session = await getSessionById(sessionId);
+  return session?.started_at && !session.ended_at && !session.completed_at ? sessionId : null;
+}
+
+export async function startSessionTunerActivity() {
+  const sessionId = await activeRunningSessionId();
+  if (!sessionId) return;
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  await db.execute(
+    `INSERT INTO session_tuner_stats (session_id, active_started_at, total_seconds, tuned_notes_json, updated_at)
+     VALUES (?, ?, 0, '[]', ?)
+     ON CONFLICT(session_id) DO UPDATE SET active_started_at = excluded.active_started_at, updated_at = excluded.updated_at`,
+    [sessionId, now, now]
+  );
+}
+
+export async function stopSessionTunerActivity() {
+  const sessionId = await getActiveSessionId();
+  if (!sessionId) return;
+  const db = await getDatabase();
+  const rows = await db.select<{ active_started_at: string | null; total_seconds: number }[]>(
+    "SELECT active_started_at, total_seconds FROM session_tuner_stats WHERE session_id = ?", [sessionId]
+  );
+  if (!rows[0]?.active_started_at) return;
+  const now = new Date();
+  const elapsed = Math.max(0, Math.floor((now.getTime() - new Date(rows[0].active_started_at!).getTime()) / 1000));
+  await db.execute(
+    "UPDATE session_tuner_stats SET active_started_at = NULL, total_seconds = ?, updated_at = ? WHERE session_id = ?",
+    [(rows[0].total_seconds ?? 0) + elapsed, now.toISOString(), sessionId]
+  );
+}
+
+export async function recordSessionTunedNote(note: string) {
+  const sessionId = await activeRunningSessionId();
+  if (!sessionId) return;
+  const db = await getDatabase();
+  const rows = await db.select<{ tuned_notes_json: string }[]>(
+    "SELECT tuned_notes_json FROM session_tuner_stats WHERE session_id = ?", [sessionId]
+  );
+  if (!rows[0]) return;
+  let notes: string[] = [];
+  try { notes = JSON.parse(rows[0].tuned_notes_json); } catch { notes = []; }
+  if (notes.includes(note)) return;
+  notes.push(note);
+  await db.execute(
+    "UPDATE session_tuner_stats SET tuned_notes_json = ?, updated_at = ? WHERE session_id = ?",
+    [JSON.stringify(notes), new Date().toISOString(), sessionId]
+  );
 }
 
 export async function reopenSession(sessionId: number) {

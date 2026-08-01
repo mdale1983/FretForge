@@ -91,6 +91,15 @@ struct FretForgeLinkTelemetry {
     instance_id: String,
     #[serde(default = "default_link_source_name")]
     source_name: String,
+    #[serde(default)]
+    attacks: Vec<FretForgeAttackTelemetry>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct FretForgeAttackTelemetry {
+    sequence: u64,
+    timestamp_ms: i64,
+    strength: f32,
 }
 
 fn legacy_link_id() -> String { "legacy".to_string() }
@@ -110,6 +119,7 @@ struct FretForgeLinkState {
     plugin_version: String,
     frequency: f64,
     clarity: f64,
+    attacks: Vec<FretForgeAttackTelemetry>,
 }
 
 struct StudioApplicationDefinition {
@@ -1085,6 +1095,7 @@ fn link_state(value: FretForgeLinkTelemetry, now_ms: u64) -> FretForgeLinkState 
         installed: fretforge_link_is_installed(), sample_rate: value.sample_rate,
         input_rms: value.input_rms, input_peak: value.input_peak,
         plugin_version: value.plugin_version, frequency: value.frequency, clarity: value.clarity,
+        attacks: value.attacks,
     }
 }
 
@@ -1092,7 +1103,7 @@ fn empty_link_state() -> FretForgeLinkState {
     FretForgeLinkState { instance_id: String::new(), source_name: "FretForge Link".to_string(),
         connected: false, installed: fretforge_link_is_installed(), sample_rate: 0.0,
         input_rms: 0.0, input_peak: 0.0, plugin_version: String::new(),
-        frequency: 0.0, clarity: 0.0 }
+        frequency: 0.0, clarity: 0.0, attacks: Vec::new() }
 }
 
 #[tauri::command]
@@ -1108,8 +1119,12 @@ fn list_fretforge_link_sources() -> Vec<FretForgeLinkState> {
 fn get_fretforge_link_state(source_id: Option<String>) -> FretForgeLinkState {
     let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
     let sources = refresh_fretforge_link_cache();
-    sources.into_iter().find(|value| source_id.as_ref().is_some_and(|id| id == &value.instance_id))
-        .or_else(|| refresh_fretforge_link_cache().into_iter().find(|value| value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500))
+    sources.iter().find(|value| {
+        source_id.as_ref().is_some_and(|id| id == &value.instance_id)
+            && value.connected
+            && now_ms.saturating_sub(value.timestamp_ms) < 1_500
+    }).cloned()
+        .or_else(|| sources.into_iter().find(|value| value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500))
         .map(|value| link_state(value, now_ms)).unwrap_or_else(empty_link_state)
 }
 

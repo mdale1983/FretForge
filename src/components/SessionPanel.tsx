@@ -3,6 +3,7 @@ import { getActiveProjectId } from "../services/projectService";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import NewSessionModal from "./NewSessionModal";
 import { setActiveProject } from "../services/projectService";
+import { modules as moduleDefinitions } from "../data/modules";
 import {
   completeSession,
   getCompletedSessionsForProject,
@@ -12,6 +13,10 @@ import {
   getSessionsForProject,
   renameSession,
   reopenSession,
+  startSession,
+  endSession,
+  getSessionPracticeSummary,
+  type SessionPracticeSummary,
   setActiveSession,
   updateSessionNotes,
   type Session,
@@ -44,10 +49,42 @@ function SessionPanel({
 
   const [notesValue, setNotesValue] = useState("");
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
+  const [practiceSummaries, setPracticeSummaries] = useState<Record<number, SessionPracticeSummary>>({});
   const selectedSession =
     sessions.find((session) => session.id === currentActiveSessionId) ?? sessions[0] ?? null;
   const sessionQuery = "";
   const visibleSessions = selectedSession ? [selectedSession] : [];
+
+  useEffect(() => {
+    if (!selectedSession?.started_at || selectedSession.ended_at) return;
+    const interval = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [selectedSession?.started_at, selectedSession?.ended_at]);
+
+  function formatDuration(seconds: number) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remaining = seconds % 60;
+    return hours > 0
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`
+      : `${minutes}:${String(remaining).padStart(2, "0")}`;
+  }
+
+  function sessionElapsed(session: Session) {
+    if (!session.started_at) return 0;
+    if (session.ended_at) return session.duration_seconds ?? 0;
+    return Math.max(0, Math.floor((clock - new Date(session.started_at).getTime()) / 1000));
+  }
+
+  function sessionModules(session: Session) {
+    try { return session.modules_used_json ? JSON.parse(session.modules_used_json) as string[] : []; }
+    catch { return []; }
+  }
+
+  function moduleNames(session: Session) {
+    return sessionModules(session).map((id) => moduleDefinitions.find((module) => module.id === id)?.name ?? id);
+  }
 
   async function loadSessions() {
     const projectId = await getActiveProjectId();
@@ -63,6 +100,8 @@ function SessionPanel({
 
     const loadedSessions = await getSessionsForProject(projectId);
     setSessions(loadedSessions);
+    const summaries = await Promise.all(loadedSessions.map(async (session) => [session.id, await getSessionPracticeSummary(session.id)] as const));
+    setPracticeSummaries((current) => ({ ...current, ...Object.fromEntries(summaries) }));
   }
 
   async function loadCompletedSessions() {
@@ -75,6 +114,8 @@ function SessionPanel({
       await getCompletedSessionsForProject(activeProjectId);
 
     setCompletedSessions(loadedCompletedSessions);
+    const summaries = await Promise.all(loadedCompletedSessions.map(async (session) => [session.id, await getSessionPracticeSummary(session.id)] as const));
+    setPracticeSummaries((current) => ({ ...current, ...Object.fromEntries(summaries) }));
   }
 
   async function handleNewSession(projectId: number, name: string, notes: string) {
@@ -161,6 +202,23 @@ function SessionPanel({
     await loadSessions();
     await onWorkstationStatusRefresh();
     }, "The session could not be completed.");
+  }
+
+  async function handleStartSession(sessionId: number) {
+    await sessionAction.run(async () => {
+      await startSession(sessionId);
+      setClock(Date.now());
+      await loadSessions();
+      await onWorkstationStatusRefresh();
+    }, "The session timer could not be started.");
+  }
+
+  async function handleEndSession(sessionId: number) {
+    await sessionAction.run(async () => {
+      await endSession(sessionId);
+      await loadSessions();
+      await onWorkstationStatusRefresh();
+    }, "The session timer could not be ended.");
   }
 
   async function handleReopenSession(session: Session) {
@@ -374,6 +432,26 @@ function SessionPanel({
                     {new Date(session.updated_at).toLocaleString()}
                   </div>
 
+                  <div className={`mt-4 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${theme === "dark" ? "border-zinc-700 bg-zinc-950" : "border-zinc-300 bg-zinc-50"}`}>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{!session.started_at ? "Ready" : session.ended_at ? "Ended" : "In Progress"}</div>
+                      <div className="mt-1 font-mono text-lg font-semibold text-orange-400">{formatDuration(sessionElapsed(session))}</div>
+                    </div>
+                    {!session.started_at ? (
+                      <button type="button" onClick={(event) => { event.stopPropagation(); handleStartSession(session.id); }} className="rounded-md bg-orange-500 px-3 py-2 text-xs font-semibold text-black hover:bg-orange-400">Start Session</button>
+                    ) : !session.ended_at ? (
+                      <button type="button" onClick={(event) => { event.stopPropagation(); handleEndSession(session.id); }} className="rounded-md border border-orange-500 px-3 py-2 text-xs font-semibold text-orange-400 hover:bg-orange-500/10">End Session</button>
+                    ) : <span className="text-xs text-emerald-400">Ready to complete</span>}
+                  </div>
+
+                  {sessionModules(session).length > 0 && <div className="mt-2 text-xs text-zinc-500">Modules used: {moduleNames(session).join(", ")}</div>}
+                  {practiceSummaries[session.id] && (practiceSummaries[session.id].forgePulseRunCount > 0 || practiceSummaries[session.id].tunerSeconds > 0) && <div className={`mt-3 grid gap-2 rounded-lg border p-3 text-xs sm:grid-cols-2 ${theme === "dark" ? "border-zinc-700 bg-zinc-950" : "border-zinc-300 bg-zinc-50"}`}>
+                    <div><span className="text-zinc-500">ForgePulse:</span> {practiceSummaries[session.id].forgePulseRunCount} run{practiceSummaries[session.id].forgePulseRunCount === 1 ? "" : "s"} · {formatDuration(practiceSummaries[session.id].forgePulseSeconds)}</div>
+                    <div><span className="text-zinc-500">BPM:</span> {practiceSummaries[session.id].minimumBpm == null ? "None" : practiceSummaries[session.id].minimumBpm === practiceSummaries[session.id].maximumBpm ? practiceSummaries[session.id].minimumBpm : `${practiceSummaries[session.id].minimumBpm}–${practiceSummaries[session.id].maximumBpm}`}</div>
+                    <div><span className="text-zinc-500">Subdivisions:</span> {practiceSummaries[session.id].subdivisions.join(", ") || "None"}</div>
+                    <div><span className="text-zinc-500">ForgeTune:</span> {formatDuration(practiceSummaries[session.id].tunerSeconds)} · {practiceSummaries[session.id].tunedNotes.length} notes in tune</div>
+                  </div>}
+
                   <div className="mt-3 min-h-0 flex-1">
                     {editingNotesSessionId === session.id ? (
                       <div className="flex h-full min-h-0 flex-col gap-2">
@@ -578,6 +656,7 @@ function SessionPanel({
                         {session.notes.trim()}
                       </div>
                     )}
+                    {session.started_at && <div className={`mt-3 grid gap-1 rounded-lg border p-3 text-xs ${theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-zinc-300 bg-white"}`}><div><span className="text-zinc-500">Duration:</span> {formatDuration(session.duration_seconds ?? 0)}</div><div><span className="text-zinc-500">Modules used:</span> {moduleNames(session).join(", ") || "None recorded"}</div>{practiceSummaries[session.id]?.forgePulseRunCount > 0 && <div><span className="text-zinc-500">ForgePulse:</span> {practiceSummaries[session.id].forgePulseRunCount} runs · {formatDuration(practiceSummaries[session.id].forgePulseSeconds)} · {practiceSummaries[session.id].minimumBpm}–{practiceSummaries[session.id].maximumBpm} BPM</div>}{practiceSummaries[session.id]?.tunerSeconds > 0 && <div><span className="text-zinc-500">ForgeTune:</span> {formatDuration(practiceSummaries[session.id].tunerSeconds)} · {practiceSummaries[session.id].tunedNotes.join(", ") || "No confirmed notes"}</div>}</div>}
                     <div className="mt-3 flex justify-end gap-2">
                       <button type="button" onClick={() => handleReopenSession(session)} className="rounded-md border border-emerald-500/50 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10">Reopen Session</button>
                       <button type="button" onClick={() => handleDeleteCompletedSession(session)} className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10">Delete Permanently</button>

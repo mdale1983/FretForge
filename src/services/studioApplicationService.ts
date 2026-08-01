@@ -23,6 +23,13 @@ export type FretForgeLinkState = {
   plugin_version: string;
   frequency: number;
   clarity: number;
+  attacks: FretForgeAttack[];
+};
+
+export type FretForgeAttack = {
+  sequence: number;
+  timestamp_ms: number;
+  strength: number;
 };
 
 export function listStudioApplications() {

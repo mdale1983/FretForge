@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ForgePulseSessionView } from "../../features/forgepulse/components/ForgePulseSessionView";
 import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgePulseSetupView";
 import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
+import { useTimingCoach } from "../../features/forgepulse/hooks/useTimingCoach";
 import {
   deleteForgePulseRun,
   getForgePulseSummary,
@@ -17,6 +18,11 @@ import {
   loadForgePulsePreferences,
   saveForgePulsePreferences,
 } from "../../features/forgepulse/forgePulsePreferences";
+import {
+  launchStudioApplication,
+  listStudioApplications,
+  type StudioApplication,
+} from "../../services/studioApplicationService";
 
 import {
   type Subdivision,
@@ -73,6 +79,9 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   });
   const [isSavingRun, setIsSavingRun] = useState(false);
   const [runSaveError, setRunSaveError] = useState("");
+  const [preferredDaw, setPreferredDaw] = useState<StudioApplication | null>(null);
+  const [isLaunchingDaw, setIsLaunchingDaw] = useState(false);
+  const [dawLaunchError, setDawLaunchError] = useState("");
   const lastAutomaticCompletionRef = useRef(0);
   const savingRunRef = useRef(false);
 
@@ -86,6 +95,33 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     durationMinutes,
     volume,
   });
+  const timingCoach = useTimingCoach(metronome.status, bpm, subdivision);
+
+  const loadPreferredDaw = useCallback(async () => {
+    const applications = await listStudioApplications();
+    const preferredId = localStorage.getItem("fretforge.preferredDaw") ?? "reaper";
+    setPreferredDaw(applications.find((application) => application.id === preferredId) ?? null);
+  }, []);
+
+  useEffect(() => {
+    loadPreferredDaw().catch(() => setPreferredDaw(null));
+    const timer = window.setInterval(() => loadPreferredDaw().catch(() => undefined), 3_000);
+    return () => window.clearInterval(timer);
+  }, [loadPreferredDaw]);
+
+  async function handleLaunchDaw() {
+    if (!preferredDaw) return;
+    try {
+      setIsLaunchingDaw(true);
+      setDawLaunchError("");
+      await launchStudioApplication(preferredDaw.id);
+      window.setTimeout(() => loadPreferredDaw().catch(() => undefined), 1_200);
+    } catch (error) {
+      setDawLaunchError(String(error));
+    } finally {
+      setIsLaunchingDaw(false);
+    }
+  }
 
   useEffect(() => {
     saveForgePulsePreferences({
@@ -272,6 +308,13 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           currentBeat={metronome.currentBeat}
           currentSubdivision={metronome.currentSubdivision}
           elapsedSeconds={metronome.elapsedSeconds}
+          timingCoach={timingCoach}
+          dawName={preferredDaw?.name ?? "your preferred DAW"}
+          dawInstalled={preferredDaw?.installed ?? false}
+          dawRunning={preferredDaw?.running ?? false}
+          isLaunchingDaw={isLaunchingDaw}
+          dawLaunchError={dawLaunchError}
+          onLaunchDaw={handleLaunchDaw}
           start={metronome.start}
           stop={stopAndRecord}
           onBack={() => {

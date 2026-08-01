@@ -209,6 +209,15 @@ export async function completeProject(projectId: number) {
   const now = new Date().toISOString();
 
   await db.execute(
+    `UPDATE sessions
+     SET ended_at = ?,
+         duration_seconds = duration_seconds + MAX(0, CAST((julianday(?) - julianday(started_at)) * 86400 AS INTEGER)),
+         updated_at = ?
+     WHERE project_id = ? AND started_at IS NOT NULL AND ended_at IS NULL AND completed_at IS NULL`,
+    [now, now, now, projectId]
+  );
+
+  await db.execute(
     `
     UPDATE projects
     SET

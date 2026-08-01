@@ -68,12 +68,20 @@ protected:
 	std::atomic<uint64_t> mAnalysisWriteIndex {0};
 	std::atomic<float> mFrequency {0.0f};
 	std::atomic<float> mClarity {0.0f};
+	std::atomic<uint64_t> mProcessedSamples {0};
+	std::atomic<uint64_t> mAttackSequence {0};
+	std::array<std::atomic<uint64_t>, 32> mAttackSampleIndices {};
+	std::array<std::atomic<float>, 32> mAttackStrengths {};
+	float mAttackEnvelope {0.0f};
+	float mNoiseFloor {0.001f};
+	uint64_t mSamplesSinceAttack {48000};
 	std::thread mTelemetryThread;
 
 	void startTelemetry ();
 	void stopTelemetry ();
 	void writeTelemetry (bool connected);
 	void analyzePitch ();
+	void processAttackSample (float sample);
 	static std::string createInstanceId ();
 };
 

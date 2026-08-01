@@ -1,5 +1,7 @@
 import { CheckCircle2, Mic, Square } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { usePitchDetector } from "../../features/forgetune/hooks/usePitchDetector";
+import { recordSessionTunedNote, startSessionTunerActivity, stopSessionTunerActivity } from "../../services/SessionService";
 
 type ForgeTuneWorkspaceProps = { theme: string };
 
@@ -8,6 +10,28 @@ export default function ForgeTuneWorkspace({ theme }: ForgeTuneWorkspaceProps) {
   const cents = tuner.pitch?.cents ?? 0;
   const meterPosition = Math.min(100, Math.max(0, cents + 50));
   const isInTune = tuner.pitch !== null && Math.abs(cents) <= 5;
+  const wasListening = useRef(false);
+  const recordedNotes = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (tuner.isListening && !wasListening.current) {
+      recordedNotes.current.clear();
+      startSessionTunerActivity().catch(() => undefined);
+    } else if (!tuner.isListening && wasListening.current) {
+      stopSessionTunerActivity().catch(() => undefined);
+    }
+    wasListening.current = tuner.isListening;
+  }, [tuner.isListening]);
+
+  useEffect(() => {
+    if (!tuner.isListening || !isInTune || !tuner.pitch || tuner.clarity < 0.75) return;
+    const note = `${tuner.pitch.note}${tuner.pitch.octave}`;
+    if (recordedNotes.current.has(note)) return;
+    recordedNotes.current.add(note);
+    recordSessionTunedNote(note).catch(() => undefined);
+  }, [isInTune, tuner.clarity, tuner.isListening, tuner.pitch]);
+
+  useEffect(() => () => { if (wasListening.current) stopSessionTunerActivity().catch(() => undefined); }, []);
 
   return (
     <section className={`flex flex-col rounded-2xl border p-4 shadow-lg ${theme === "dark"
