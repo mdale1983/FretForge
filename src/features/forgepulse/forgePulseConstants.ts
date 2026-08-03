@@ -58,3 +58,12 @@ export const subdivisionLabels: Record<Subdivision, string> = {
   triplet: "EIGHTH-NOTE TRIPLETS",
   sixteenth: "SIXTEENTH NOTES",
 };
+
+export const subdivisionInstructions: Record<Subdivision, string> = {
+  whole: "Attack on the first click, let the note ring through three more beats, then attack again.",
+  half: "Attack on beats 1 and 3. Let each note ring for two beats.",
+  quarter: "Attack once on every click and keep each note evenly spaced.",
+  eighth: "Attack twice per beat: on the click and halfway to the next click. Count 1-and, 2-and.",
+  triplet: "Attack three evenly spaced notes per beat. Count 1-trip-let, 2-trip-let.",
+  sixteenth: "Attack four evenly spaced notes per beat. Count 1-e-and-a, 2-e-and-a.",
+};

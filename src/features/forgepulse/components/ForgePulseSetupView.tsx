@@ -1,4 +1,4 @@
-import { subdivisionLabels } from "../forgePulseConstants";
+import { subdivisionInstructions, subdivisionLabels } from "../forgePulseConstants";
 import { ForgePulseCard } from "./ForgePulseCard";
 
 import type {
@@ -292,6 +292,11 @@ export function ForgePulseSetupView({
                 >
                 {bpm} BPM • {subdivisionLabels[subdivision]} • {timeSignature}
                 </p>
+
+                <div className="mt-4 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+                  <p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p>
+                  <p className="mt-2 text-sm leading-relaxed">{subdivisionInstructions[subdivision]}</p>
+                </div>
             </ForgePulseCard>
         </div>
 

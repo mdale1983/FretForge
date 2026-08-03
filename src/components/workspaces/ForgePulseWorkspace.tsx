@@ -22,6 +22,7 @@ import {
   launchStudioApplication,
   listStudioApplications,
   type StudioApplication,
+  setFretForgeLinkGain,
 } from "../../services/studioApplicationService";
 
 import {
@@ -82,6 +83,12 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   const [preferredDaw, setPreferredDaw] = useState<StudioApplication | null>(null);
   const [isLaunchingDaw, setIsLaunchingDaw] = useState(false);
   const [dawLaunchError, setDawLaunchError] = useState("");
+  const [guitarVolume, setGuitarVolume] = useState(() => {
+    const stored = localStorage.getItem("fretforge.forgePulseGuitarVolumeV2");
+    if (stored === null) return 1;
+    const saved = Number(stored);
+    return Number.isFinite(saved) && saved >= 0 && saved <= 1.5 ? saved : 1;
+  });
   const lastAutomaticCompletionRef = useRef(0);
   const savingRunRef = useRef(false);
 
@@ -122,6 +129,19 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       setIsLaunchingDaw(false);
     }
   }
+
+  function handleGuitarVolumeChange(value: number) {
+    setGuitarVolume(value);
+    localStorage.setItem("fretforge.forgePulseGuitarVolumeV2", String(value));
+    if (timingCoach.sourceId) {
+      setFretForgeLinkGain(timingCoach.sourceId, value).catch((error) => setDawLaunchError(String(error)));
+    }
+  }
+
+  useEffect(() => {
+    if (!timingCoach.connected || !timingCoach.sourceId) return;
+    setFretForgeLinkGain(timingCoach.sourceId, guitarVolume).catch((error) => setDawLaunchError(String(error)));
+  }, [guitarVolume, timingCoach.connected, timingCoach.sourceId]);
 
   useEffect(() => {
     saveForgePulsePreferences({
@@ -315,6 +335,8 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           isLaunchingDaw={isLaunchingDaw}
           dawLaunchError={dawLaunchError}
           onLaunchDaw={handleLaunchDaw}
+          guitarVolume={guitarVolume}
+          onGuitarVolumeChange={handleGuitarVolumeChange}
           start={metronome.start}
           stop={stopAndRecord}
           onBack={() => {

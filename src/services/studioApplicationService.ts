@@ -51,3 +51,7 @@ export function getFretForgeLinkState(sourceId?: string) {
 export function listFretForgeLinkSources() {
   return invoke<FretForgeLinkState[]>("list_fretforge_link_sources");
 }
+
+export function setFretForgeLinkGain(sourceId: string, gain: number) {
+  return invoke<void>("set_fretforge_link_gain", { sourceId, gain });
+}

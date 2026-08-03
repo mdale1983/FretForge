@@ -1,4 +1,4 @@
-import { subdivisionLabels } from "../forgePulseConstants";
+import { subdivisionInstructions, subdivisionLabels } from "../forgePulseConstants";
 import type {
   Subdivision,
   TimeSignature,
@@ -25,6 +25,8 @@ type ForgePulseSessionViewProps = {
   isLaunchingDaw: boolean;
   dawLaunchError: string;
   onLaunchDaw: () => void;
+  guitarVolume: number;
+  onGuitarVolumeChange: (value: number) => void;
   onBack: () => void;
   start: () => void;
   stop: () => void;
@@ -55,6 +57,8 @@ export function ForgePulseSessionView({
   isLaunchingDaw,
   dawLaunchError,
   onLaunchDaw,
+  guitarVolume,
+  onGuitarVolumeChange,
   onBack,
   start,
   stop,
@@ -99,6 +103,11 @@ export function ForgePulseSessionView({
             {formatDuration(timerEnabled ? remainingSeconds : elapsedSeconds)}
           </p>
         </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
+        <p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p>
+        <p className="mt-2 text-sm leading-relaxed">{subdivisionInstructions[subdivision]}</p>
       </div>
 
       <div className={`mt-4 rounded-xl border p-4 ${
@@ -161,6 +170,19 @@ export function ForgePulseSessionView({
               </div>
               <span className="w-10 text-right text-xs tabular-nums text-zinc-500">{timingCoach.inputLevel}%</span>
             </div>
+            <label className="mt-3 block text-xs uppercase tracking-wide text-zinc-500">
+              Guitar Volume · {Math.round(guitarVolume * 100)}%
+              <input
+                type="range"
+                min={0}
+                max={1.5}
+                step={0.05}
+                value={guitarVolume}
+                onChange={(event) => onGuitarVolumeChange(Number(event.target.value))}
+                className="mt-2 block w-full accent-orange-500"
+              />
+              <span className="mt-1 block normal-case tracking-normal text-zinc-500">Controls FretForge Link monitoring level; it does not change interface input gain.</span>
+            </label>
             {status === "idle" && (
               <p className="mt-3 text-sm text-zinc-400">Pluck a string to verify the input meter, then start the metronome for scored timing feedback.</p>
             )}

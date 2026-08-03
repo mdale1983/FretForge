@@ -68,6 +68,7 @@ protected:
 	std::atomic<uint64_t> mAnalysisWriteIndex {0};
 	std::atomic<float> mFrequency {0.0f};
 	std::atomic<float> mClarity {0.0f};
+	std::atomic<float> mOutputGain {1.0f};
 	std::atomic<uint64_t> mProcessedSamples {0};
 	std::atomic<uint64_t> mAttackSequence {0};
 	std::array<std::atomic<uint64_t>, 32> mAttackSampleIndices {};
@@ -82,6 +83,7 @@ protected:
 	void writeTelemetry (bool connected);
 	void analyzePitch ();
 	void processAttackSample (float sample);
+	void refreshOutputGain ();
 	static std::string createInstanceId ();
 };
 

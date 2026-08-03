@@ -1128,6 +1128,18 @@ fn get_fretforge_link_state(source_id: Option<String>) -> FretForgeLinkState {
         .map(|value| link_state(value, now_ms)).unwrap_or_else(empty_link_state)
 }
 
+#[tauri::command]
+fn set_fretforge_link_gain(source_id: String, gain: f32) -> Result<(), String> {
+    let directory = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+        .ok_or_else(|| "Windows local application data is unavailable.".to_string())?
+        .join("FretForge");
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let safe_id = source_id.chars().filter(|character| character.is_ascii_alphanumeric() || *character == '-').collect::<String>();
+    if safe_id.is_empty() { return Err("No active FretForge Link source was selected.".to_string()); }
+    std::fs::write(directory.join(format!("fretforge-link-{safe_id}.gain")), gain.clamp(0.0, 1.5).to_string())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1150,7 +1162,8 @@ pub fn run() {
             launch_studio_application,
             close_studio_application,
             list_fretforge_link_sources,
-            get_fretforge_link_state
+            get_fretforge_link_state,
+            set_fretforge_link_gain
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -15,6 +15,7 @@ type Judgement = "early" | "late" | "in-time";
 
 export type TimingCoachState = {
   connected: boolean;
+  sourceId: string;
   sourceName: string;
   inputLevel: number;
   calibrating: boolean;
@@ -29,6 +30,7 @@ export type TimingCoachState = {
 
 const initialState: TimingCoachState = {
   connected: false,
+  sourceId: "",
   sourceName: "",
   inputLevel: 0,
   calibrating: true,
@@ -60,7 +62,7 @@ export function useTimingCoach(status: TransportStatus, bpm: number, subdivision
       correctedOffsetsRef.current = [];
       matchedStepsRef.current = new Set();
       extrasRef.current = 0;
-      setState((previous) => ({ ...initialState, connected: previous.connected, sourceName: previous.sourceName, inputLevel: previous.inputLevel }));
+      setState((previous) => ({ ...initialState, connected: previous.connected, sourceId: previous.sourceId, sourceName: previous.sourceName, inputLevel: previous.inputLevel }));
     } else {
       startedAtRef.current = 0;
     }
@@ -78,6 +80,7 @@ export function useTimingCoach(status: TransportStatus, bpm: number, subdivision
         setState((previous) => ({
           ...previous,
           connected: link.connected,
+          sourceId: link.instance_id,
           sourceName: link.source_name,
           inputLevel: Math.min(100, Math.round(Math.max(link.input_peak, link.input_rms * 2) * 220)),
         }));
@@ -114,6 +117,7 @@ export function useTimingCoach(status: TransportStatus, bpm: number, subdivision
 
       setState((previous) => ({
         connected: link.connected,
+        sourceId: link.instance_id,
         sourceName: link.source_name,
         inputLevel: Math.min(100, Math.round(Math.max(link.input_peak, link.input_rms * 2) * 220)),
         calibrating: rawOffsetsRef.current.length < 4,

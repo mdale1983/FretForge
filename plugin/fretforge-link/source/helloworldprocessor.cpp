@@ -133,7 +133,7 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
             for (int32 sample = 0; sample < data.numSamples; ++sample)
             {
                 const float value = input ? input[sample] : 0.0f;
-                output[sample] = value;
+                output[sample] = value * mOutputGain.load (std::memory_order_relaxed);
                 if (channel == 0)
                 {
                     const auto writeIndex = mAnalysisWriteIndex.fetch_add (1, std::memory_order_relaxed);
@@ -158,7 +158,7 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
             for (int32 sample = 0; sample < data.numSamples; ++sample)
             {
                 const double value = input ? input[sample] : 0.0;
-                output[sample] = value;
+                output[sample] = value * mOutputGain.load (std::memory_order_relaxed);
                 if (channel == 0)
                 {
                     const auto writeIndex = mAnalysisWriteIndex.fetch_add (1, std::memory_order_relaxed);
@@ -261,12 +261,26 @@ void HelloWorldProcessor::startTelemetry ()
 	mTelemetryThread = std::thread ([this] {
 		while (mTelemetryRunning.load ())
 		{
+			refreshOutputGain ();
 			analyzePitch ();
 			writeTelemetry (true);
 			std::this_thread::sleep_for (std::chrono::milliseconds (75));
 		}
 		writeTelemetry (false);
 	});
+}
+
+void HelloWorldProcessor::refreshOutputGain ()
+{
+#if SMTG_OS_WINDOWS
+	const char* localAppData = std::getenv ("LOCALAPPDATA");
+	if (!localAppData) return;
+	std::ifstream input (std::filesystem::path (localAppData) / "FretForge" /
+		("fretforge-link-" + mInstanceId + ".gain"));
+	float gain = 1.0f;
+	if (input >> gain)
+		mOutputGain.store (std::clamp (gain, 0.0f, 1.5f), std::memory_order_relaxed);
+#endif
 }
 
 void HelloWorldProcessor::analyzePitch ()
@@ -341,6 +355,7 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 		<< ",\"input_peak\":" << mInputPeak.load (std::memory_order_relaxed)
 		<< ",\"frequency\":" << mFrequency.load (std::memory_order_relaxed)
 		<< ",\"clarity\":" << mClarity.load (std::memory_order_relaxed);
+	output << ",\"output_gain\":" << mOutputGain.load (std::memory_order_relaxed);
 	const auto latestSequence = mAttackSequence.load (std::memory_order_acquire);
 	const auto processedSamples = mProcessedSamples.load (std::memory_order_acquire);
 	const auto sampleRate = std::max (1.0, mSampleRate.load (std::memory_order_relaxed));
