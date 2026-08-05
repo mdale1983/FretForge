@@ -70,12 +70,19 @@ protected:
 	std::atomic<float> mClarity {0.0f};
 	std::atomic<float> mOutputGain {1.0f};
 	std::atomic<uint64_t> mProcessedSamples {0};
+	std::atomic<uint64_t> mAudioClockSample {0};
+	std::atomic<int64_t> mAudioClockTimestampMs {0};
+	std::atomic<int64_t> mLastProcessTimestampMs {0};
 	std::atomic<uint64_t> mAttackSequence {0};
 	std::array<std::atomic<uint64_t>, 32> mAttackSampleIndices {};
 	std::array<std::atomic<float>, 32> mAttackStrengths {};
-	float mAttackEnvelope {0.0f};
+	float mPreviousAttackSample {0.0f};
+	float mFastAttackEnvelope {0.0f};
+	float mSlowAttackEnvelope {0.0f};
 	float mNoiseFloor {0.001f};
 	uint64_t mSamplesSinceAttack {48000};
+	bool mAttackArmed {true};
+	uint64_t mAttackReleaseSamples {0};
 	std::thread mTelemetryThread;
 
 	void startTelemetry ();

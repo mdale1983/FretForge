@@ -5,11 +5,16 @@ import type {
   TransportStatus,
 } from "../forgePulseTypes";
 import type { TimingCoachState } from "../hooks/useTimingCoach";
+import type { TimingStrictness } from "../hooks/useTimingCoach";
+import type { VoiceCoachFrequency } from "../hooks/useVoiceCoach";
 
 type ForgePulseSessionViewProps = {
   theme: string;
   sessionTitle: string;
   bpm: number;
+  measuredBpm: number;
+  measuredIntervalMs: number;
+  clickJitterMs: number;
   subdivision: Subdivision;
   timeSignature: TimeSignature;
   status: TransportStatus;
@@ -27,6 +32,12 @@ type ForgePulseSessionViewProps = {
   onLaunchDaw: () => void;
   guitarVolume: number;
   onGuitarVolumeChange: (value: number) => void;
+  voiceCoachFrequency: VoiceCoachFrequency;
+  voiceCoachSupported: boolean;
+  voiceCoachSpeaking: boolean;
+  voiceCoachLastMessage: string;
+  voiceCoachOutputError: string;
+  timingStrictness: TimingStrictness;
   onBack: () => void;
   start: () => void;
   stop: () => void;
@@ -42,6 +53,9 @@ export function ForgePulseSessionView({
   theme,
   sessionTitle,
   bpm,
+  measuredBpm,
+  measuredIntervalMs,
+  clickJitterMs,
   subdivision,
   timeSignature,
   status,
@@ -59,6 +73,12 @@ export function ForgePulseSessionView({
   onLaunchDaw,
   guitarVolume,
   onGuitarVolumeChange,
+  voiceCoachFrequency,
+  voiceCoachSupported,
+  voiceCoachSpeaking,
+  voiceCoachLastMessage,
+  voiceCoachOutputError,
+  timingStrictness,
   onBack,
   start,
   stop,
@@ -66,6 +86,16 @@ export function ForgePulseSessionView({
   const beatsPerMeasure = Number(timeSignature.split("/")[0]);
   const isRunning = status !== "idle";
   const remainingSeconds = Math.max(durationMinutes * 60 - elapsedSeconds, 0);
+	const showMetronomeDiagnostics = import.meta.env.DEV;
+	const latestTimingLabel = timingCoach.latestJudgement === "locked"
+	  ? "Centered"
+	  : timingCoach.latestJudgement === "great"
+		? "Great timing"
+		: timingCoach.latestJudgement === "good"
+		  ? "Good timing"
+		  : timingCoach.latestJudgement === "on-tempo"
+			? "On tempo"
+			: `${timingCoach.latestJudgement === "early" ? "Early" : "Late"} ${Math.abs(timingCoach.latestOffsetMs ?? 0)} ms`;
 
   return (
     <div
@@ -84,18 +114,26 @@ export function ForgePulseSessionView({
         {sessionTitle}
       </h3>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-zinc-700/60 p-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-zinc-700/60 px-3 py-2">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Tempo</p>
           <p className="mt-1 text-lg font-semibold">{bpm} BPM</p>
+		  {showMetronomeDiagnostics && measuredBpm > 0 && (
+			<div className="mt-1 text-xs text-emerald-400">
+			  <p>{status === "playing" ? "Measured" : "Last measured"} click rate: {measuredBpm.toFixed(1)} BPM</p>
+			  <p className="tabular-nums text-zinc-500">
+				Target {(60_000 / bpm).toFixed(1)} ms · Actual {measuredIntervalMs.toFixed(1)} ms · Jitter ±{clickJitterMs.toFixed(1)} ms
+			  </p>
+			</div>
+		  )}
         </div>
-        <div className="rounded-lg border border-zinc-700/60 p-3">
+        <div className="rounded-lg border border-zinc-700/60 px-3 py-2">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Pattern</p>
           <p className="mt-1 text-sm font-semibold">
             {subdivisionLabels[subdivision]} · {timeSignature}
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-700/60 p-3">
+        <div className="rounded-lg border border-zinc-700/60 px-3 py-2">
           <p className="text-xs uppercase tracking-wide text-zinc-500">
             {timerEnabled ? "Remaining" : "Elapsed"}
           </p>
@@ -105,9 +143,24 @@ export function ForgePulseSessionView({
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-        <p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p>
-        <p className="mt-2 text-sm leading-relaxed">{subdivisionInstructions[subdivision]}</p>
+      <div className="mt-3 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p>
+          <p className="text-sm leading-relaxed">{subdivisionInstructions[subdivision]}</p>
+        </div>
+        {voiceCoachFrequency !== "off" && voiceCoachSupported && (
+          <>
+            <p className="mt-2 text-xs text-zinc-500">
+              Voice Coach: {voiceCoachSpeaking ? "Speaking" : "Listening"}
+              {voiceCoachLastMessage ? ` · Last: “${voiceCoachLastMessage}”` : ""}
+            </p>
+            {voiceCoachOutputError && (
+              <p className="mt-1 text-xs text-red-400">
+                Voice Coach could not use the selected FretForge output. Check the Audio route at the top, then try Preview Voice.
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       <div className={`mt-4 rounded-xl border p-4 ${
@@ -126,13 +179,12 @@ export function ForgePulseSessionView({
           </div>
           {timingCoach.connected && timingCoach.latestJudgement && (
             <p className={`text-lg font-semibold ${
-              timingCoach.latestJudgement === "in-time" ? "text-emerald-400" : "text-orange-400"
-            }`}>
+			  timingCoach.latestJudgement === "locked" || timingCoach.latestJudgement === "great" ? "text-emerald-400" :
+			  timingCoach.latestJudgement === "good" ? "text-sky-400" : "text-orange-400"
+			}`}>
               {timingCoach.calibrating
                 ? "Calibrating…"
-                : timingCoach.latestJudgement === "in-time"
-                  ? "In time"
-                  : `${timingCoach.latestJudgement === "early" ? "Early" : "Late"} ${Math.abs(timingCoach.latestOffsetMs ?? 0)} ms`}
+				: latestTimingLabel}
             </p>
           )}
         </div>
@@ -186,20 +238,33 @@ export function ForgePulseSessionView({
             {status === "idle" && (
               <p className="mt-3 text-sm text-zinc-400">Pluck a string to verify the input meter, then start the metronome for scored timing feedback.</p>
             )}
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               <Metric label="Detected" value={timingCoach.attackCount} />
+			  <Metric label="On tempo+" value={timingCoach.correctCount} />
               <Metric label="Avg. error" value={`${timingCoach.averageErrorMs} ms`} />
               <Metric label="Consistency" value={`${timingCoach.consistencyMs} ms`} />
               <Metric label="Missed / Extra" value={`${timingCoach.missedCount} / ${timingCoach.extraCount}`} />
             </div>
+			<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+			  <span>{timingStrictness === "relaxed" ? "Learning" : timingStrictness === "tight" ? "Precision" : "Balanced"} window · ±{timingCoach.toleranceMs} ms</span>
+			  <span title="Measured delivery time from REAPER to FretForge. Attacks use REAPER's audio clock, so delivery time is not subtracted twice.">
+				REAPER → FretForge · {timingCoach.linkDelayMs} ms
+			  </span>
+			  <span title="A capped session adjustment estimated from the first four attacks. It compensates plausible interface and driver latency without hiding a large playing delay.">
+				Session adjustment · {(timingCoach.timingAdjustmentMs ?? 0) >= 0 ? "+" : ""}{timingCoach.timingAdjustmentMs ?? 0} ms
+			  </span>
+			</div>
+			<p className="mt-1 text-xs text-zinc-600">
+			  Bands: centered ±{timingCoach.bandThresholdsMs.locked} · great ±{timingCoach.bandThresholdsMs.great} · good ±{timingCoach.bandThresholdsMs.good} · on tempo ±{timingCoach.bandThresholdsMs.onTempo} ms
+			</p>
           </div>
         )}
       </div>
 
       <div className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-5 text-center">
         <p className="text-xs uppercase tracking-[0.2em] text-orange-400">
-          {status === "counting-in"
-            ? "Count In"
+		  {status === "counting-in"
+			? `Count In · ${currentBeat} of ${beatsPerMeasure}`
             : status === "playing"
               ? "Playing"
               : "Ready"}

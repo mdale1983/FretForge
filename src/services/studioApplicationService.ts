@@ -16,6 +16,7 @@ export type FretForgeLinkState = {
   instance_id: string;
   source_name: string;
   connected: boolean;
+  processing_active: boolean;
   installed: boolean;
   sample_rate: number;
   input_rms: number;
@@ -24,6 +25,8 @@ export type FretForgeLinkState = {
   frequency: number;
   clarity: number;
   attacks: FretForgeAttack[];
+  telemetry_timestamp_ms: number;
+  transport_delay_ms: number;
 };
 
 export type FretForgeAttack = {

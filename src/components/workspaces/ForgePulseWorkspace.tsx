@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ForgePulseSessionView } from "../../features/forgepulse/components/ForgePulseSessionView";
 import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgePulseSetupView";
+import { ForgePulseReadinessView } from "../../features/forgepulse/components/ForgePulseReadinessView";
+import { ForgePulseResultsView } from "../../features/forgepulse/components/ForgePulseResultsView";
 import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
-import { useTimingCoach } from "../../features/forgepulse/hooks/useTimingCoach";
+import { useTimingCoach, type TimingStrictness } from "../../features/forgepulse/hooks/useTimingCoach";
+import { useVoiceCoach, type VoiceCoachFrequency } from "../../features/forgepulse/hooks/useVoiceCoach";
 import {
   deleteForgePulseRun,
   getForgePulseSummary,
@@ -10,6 +13,7 @@ import {
   saveForgePulseRun,
   type ForgePulseRun,
   type ForgePulseSummary,
+	type ForgePulseTimingReport,
 } from "../../features/forgepulse/forgePulseService";
 import { Trash2 } from "lucide-react";
 import { getActiveProjectId } from "../../services/projectService";
@@ -89,8 +93,31 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     const saved = Number(stored);
     return Number.isFinite(saved) && saved >= 0 && saved <= 1.5 ? saved : 1;
   });
+  const [voiceCoachFrequency, setVoiceCoachFrequency] = useState<VoiceCoachFrequency>(() =>
+    (localStorage.getItem("fretforge.voiceCoachFrequency") as VoiceCoachFrequency | null) ?? "standard"
+  );
+  const [voiceCoachVolume, setVoiceCoachVolume] = useState(() => {
+    const stored = Number(localStorage.getItem("fretforge.voiceCoachVolume"));
+    return Number.isFinite(stored) && stored > 0 && stored <= 1 ? stored : 0.8;
+  });
+	const [voiceCoachVoice, setVoiceCoachVoice] = useState(() => localStorage.getItem("fretforge.voiceCoachVoice") ?? "");
+	const [voiceCoachRate, setVoiceCoachRate] = useState(() => {
+	  const stored = Number(localStorage.getItem("fretforge.voiceCoachRate"));
+	  return Number.isFinite(stored) && stored >= 0.8 && stored <= 1.15 ? stored : 0.94;
+	});
+	const [voiceCoachPitch, setVoiceCoachPitch] = useState(() => {
+	  const stored = Number(localStorage.getItem("fretforge.voiceCoachPitch"));
+	  return Number.isFinite(stored) && stored >= 0.8 && stored <= 1.2 ? stored : 0.98;
+	});
+  const [voiceDuringPlay, setVoiceDuringPlay] = useState(() => localStorage.getItem("fretforge.voiceDuringPlay") !== "false");
+  const [voiceEndSummary, setVoiceEndSummary] = useState(() => localStorage.getItem("fretforge.voiceEndSummary") !== "false");
+  const [timingStrictness, setTimingStrictness] = useState<TimingStrictness>(() =>
+    (localStorage.getItem("fretforge.timingStrictness") as TimingStrictness | null) ?? "balanced"
+  );
+  const [signalVerified, setSignalVerified] = useState(false);
   const lastAutomaticCompletionRef = useRef(0);
   const savingRunRef = useRef(false);
+	const timingCoachRef = useRef<ReturnType<typeof useTimingCoach> | null>(null);
 
   const metronome = useMetronome({
     bpm,
@@ -102,7 +129,30 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     durationMinutes,
     volume,
   });
-  const timingCoach = useTimingCoach(metronome.status, bpm, subdivision);
+  const timingCoach = useTimingCoach(metronome.status, bpm, subdivision, timingStrictness, metronome.practiceStartedAtMs);
+	timingCoachRef.current = timingCoach;
+  const voiceCoach = useVoiceCoach({
+    frequency: voiceCoachFrequency,
+    volume: voiceCoachVolume,
+    feedbackDuringPlaying: voiceDuringPlay,
+    endSummary: voiceEndSummary,
+    status: metronome.status,
+    timing: timingCoach,
+	voiceName: voiceCoachVoice,
+	rate: voiceCoachRate,
+	pitch: voiceCoachPitch,
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fretforge.voiceCoachFrequency", voiceCoachFrequency);
+    localStorage.setItem("fretforge.voiceCoachVolume", String(voiceCoachVolume));
+    localStorage.setItem("fretforge.voiceDuringPlay", String(voiceDuringPlay));
+    localStorage.setItem("fretforge.voiceEndSummary", String(voiceEndSummary));
+	localStorage.setItem("fretforge.voiceCoachVoice", voiceCoachVoice);
+	localStorage.setItem("fretforge.voiceCoachRate", String(voiceCoachRate));
+	localStorage.setItem("fretforge.voiceCoachPitch", String(voiceCoachPitch));
+    localStorage.setItem("fretforge.timingStrictness", timingStrictness);
+	}, [timingStrictness, voiceCoachFrequency, voiceCoachPitch, voiceCoachRate, voiceCoachVoice, voiceCoachVolume, voiceDuringPlay, voiceEndSummary]);
 
   const loadPreferredDaw = useCallback(async () => {
     const applications = await listStudioApplications();
@@ -144,6 +194,22 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   }, [guitarVolume, timingCoach.connected, timingCoach.sourceId]);
 
   useEffect(() => {
+    if (view !== "readiness" || !timingCoach.connected || !timingCoach.processingActive) return;
+    const fingerprint = `${timingCoach.sourceName}|${Math.round(timingCoach.sampleRate)}`;
+    const previouslyVerified = localStorage.getItem("fretforge.verifiedForgePulseRoute") === fingerprint;
+    if (previouslyVerified) {
+      setSignalVerified(true);
+      return;
+    }
+    if (timingCoach.inputLevel >= 2) {
+      localStorage.setItem("fretforge.verifiedForgePulseRoute", fingerprint);
+      setSignalVerified(true);
+    } else {
+      setSignalVerified(false);
+    }
+  }, [timingCoach.connected, timingCoach.inputLevel, timingCoach.processingActive, timingCoach.sampleRate, timingCoach.sourceName, view]);
+
+  useEffect(() => {
     saveForgePulsePreferences({
       mode,
       bpm,
@@ -167,26 +233,17 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     volume,
   ]);
 
-  const loadRecentRuns = useCallback(async () => {
-    const [runs, summary] = await Promise.all([
-      getRecentForgePulseRuns(),
-      getForgePulseSummary(),
-    ]);
-
+  const loadPracticeSummary = useCallback(async () => {
+    const [runs, summary] = await Promise.all([getRecentForgePulseRuns(), getForgePulseSummary()]);
     setRecentRuns(runs);
     setPracticeSummary(summary);
   }, []);
 
   async function handleDeleteRun(run: ForgePulseRun) {
-    const confirmed = window.confirm(
-      `Delete this ${run.duration_seconds}-second practice entry?`
-    );
-
-    if (!confirmed) return;
-
+    if (!window.confirm(`Delete this ${run.duration_seconds}-second practice entry?`)) return;
     try {
       await deleteForgePulseRun(run.id);
-      await loadRecentRuns();
+      await loadPracticeSummary();
     } catch (error) {
       console.error("ForgePulse run could not be deleted:", error);
       setRunSaveError("This practice entry could not be deleted.");
@@ -215,9 +272,25 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           subdivision,
           timeSignature,
           durationSeconds,
+		  timingReport: timingCoachRef.current ? {
+			scoredCount: timingCoachRef.current.scoredCount,
+			lockedCount: timingCoachRef.current.lockedCount,
+			greatCount: timingCoachRef.current.greatCount,
+			goodCount: timingCoachRef.current.goodCount,
+			onTempoCount: timingCoachRef.current.onTempoCount,
+			offTempoCount: timingCoachRef.current.offTempoCount,
+			missedCount: timingCoachRef.current.missedCount,
+			extraCount: timingCoachRef.current.extraCount,
+			medianOffsetMs: timingCoachRef.current.medianOffsetMs,
+			medianAbsoluteErrorMs: timingCoachRef.current.medianAbsoluteErrorMs,
+			consistencyMs: timingCoachRef.current.consistencyMs,
+			driftMs: timingCoachRef.current.driftMs,
+			pocket: timingCoachRef.current.pocket,
+			confidence: timingCoachRef.current.confidence,
+		  } satisfies ForgePulseTimingReport : null,
         });
 
-        await loadRecentRuns();
+        await loadPracticeSummary();
       } catch (error) {
         console.error("ForgePulse run could not be saved:", error);
         setRunSaveError(
@@ -230,7 +303,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     },
     [
       bpm,
-      loadRecentRuns,
+      loadPracticeSummary,
       mode,
       subdivision,
       timeSignature,
@@ -238,13 +311,13 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   );
 
   useEffect(() => {
-    loadRecentRuns().catch((error) => {
+    loadPracticeSummary().catch((error) => {
       console.error("ForgePulse history could not be loaded:", error);
       setRunSaveError(
         "Practice history is currently unavailable, but the metronome is ready."
       );
     });
-  }, [loadRecentRuns]);
+  }, [loadPracticeSummary]);
 
   useEffect(() => {
     if (
@@ -254,6 +327,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       lastAutomaticCompletionRef.current =
         metronome.automaticCompletionCount;
       recordRun(durationMinutes * 60);
+      setView("results");
     }
   }, [
     durationMinutes,
@@ -264,7 +338,13 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
   const stopAndRecord = useCallback(async () => {
     const durationSeconds = metronome.stop();
     await recordRun(durationSeconds);
+    setView("results");
   }, [metronome.stop, recordRun]);
+
+  const beginSession = useCallback(() => {
+    if (!preferredDaw?.running || !timingCoach.connected || !timingCoach.processingActive || !signalVerified) return;
+    setView("session");
+  }, [preferredDaw?.running, signalVerified, timingCoach.connected, timingCoach.processingActive]);
 
   useEffect(() => {
     if (view !== "session") return;
@@ -320,6 +400,9 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           theme={theme}
           sessionTitle={modeSessionTitles[mode]}
           bpm={bpm}
+		  measuredBpm={metronome.measuredBpm}
+		  measuredIntervalMs={metronome.measuredIntervalMs}
+		  clickJitterMs={metronome.clickJitterMs}
           subdivision={subdivision}
           timeSignature={timeSignature}
           timerEnabled={timerEnabled}
@@ -337,6 +420,12 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           onLaunchDaw={handleLaunchDaw}
           guitarVolume={guitarVolume}
           onGuitarVolumeChange={handleGuitarVolumeChange}
+          voiceCoachFrequency={voiceCoachFrequency}
+          voiceCoachSupported={voiceCoach.supported}
+          voiceCoachSpeaking={voiceCoach.speaking}
+          voiceCoachLastMessage={voiceCoach.lastMessage}
+          voiceCoachOutputError={voiceCoach.outputError}
+          timingStrictness={timingStrictness}
           start={metronome.start}
           stop={stopAndRecord}
           onBack={() => {
@@ -346,8 +435,54 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         />
       )}
 
+      {view === "readiness" && (
+        <ForgePulseReadinessView
+          theme={theme}
+          dawName={preferredDaw?.name ?? "your preferred DAW"}
+          dawInstalled={preferredDaw?.installed ?? false}
+          dawRunning={preferredDaw?.running ?? false}
+          isLaunchingDaw={isLaunchingDaw}
+          dawLaunchError={dawLaunchError}
+          linkConnected={timingCoach.connected}
+          processingActive={timingCoach.processingActive}
+          sourceName={timingCoach.sourceName}
+          inputLevel={timingCoach.inputLevel}
+          signalVerified={signalVerified}
+          guitarVolume={guitarVolume}
+          onGuitarVolumeChange={handleGuitarVolumeChange}
+          onLaunchDaw={handleLaunchDaw}
+          onBack={() => setView("setup")}
+          onStart={beginSession}
+        />
+      )}
+
+      {view === "results" && (
+        <ForgePulseResultsView
+          theme={theme}
+          timing={timingCoach}
+          onAgain={() => setView("readiness")}
+          onSetup={() => setView("setup")}
+        />
+      )}
+
       {/* Session configuration */}
       {view === "setup" && (
+        <>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-orange-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Runs</p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">{practiceSummary.runCount}</p>
+          </div>
+          <div className="rounded-xl bg-orange-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Practice Time</p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">{Math.floor(practiceSummary.totalSeconds / 60)}m {practiceSummary.totalSeconds % 60}s</p>
+          </div>
+          <div className="rounded-xl bg-orange-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Average Tempo</p>
+            <p className="mt-1 text-xl font-semibold text-orange-400">{practiceSummary.averageBpm > 0 ? `${practiceSummary.averageBpm} BPM` : "—"}</p>
+          </div>
+        </div>
+        {runSaveError && <p className="mt-3 text-sm text-red-400" role="alert">{runSaveError}</p>}
         <ForgePulseSetupView
           theme={theme}
           mode={mode}
@@ -364,6 +499,16 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           durationMinutes={durationMinutes}
           volume={volume}
           accentEnabled={accentEnabled}
+          voiceCoachFrequency={voiceCoachFrequency}
+          voiceCoachVolume={voiceCoachVolume}
+          voiceDuringPlay={voiceDuringPlay}
+          voiceEndSummary={voiceEndSummary}
+          voiceCoachSupported={voiceCoach.supported}
+		  voiceCoachVoices={voiceCoach.voices}
+		  voiceCoachVoice={voiceCoach.voices.some((voice) => voice.name === voiceCoachVoice) ? voiceCoachVoice : voiceCoach.activeVoiceName}
+		  voiceCoachRate={voiceCoachRate}
+		  voiceCoachPitch={voiceCoachPitch}
+          timingStrictness={timingStrictness}
           onModeChange={setMode}
           onBpmChange={setBpm}
           onSubdivisionChange={setSubdivision}
@@ -373,11 +518,23 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           onDurationChange={setDurationMinutes}
           onVolumeChange={setVolume}
           onAccentChange={setAccentEnabled}
-          onStartSession={() => setView("session")}
+          onVoiceCoachFrequencyChange={setVoiceCoachFrequency}
+          onVoiceCoachVolumeChange={setVoiceCoachVolume}
+		  onVoiceCoachVoiceChange={setVoiceCoachVoice}
+		  onVoiceCoachRateChange={setVoiceCoachRate}
+		  onVoiceCoachPitchChange={setVoiceCoachPitch}
+          onVoiceDuringPlayChange={setVoiceDuringPlay}
+          onVoiceEndSummaryChange={setVoiceEndSummary}
+		  onTestVoice={() => voiceCoach.speak("All set. Start whenever you're ready.")}
+          onTimingStrictnessChange={setTimingStrictness}
+          onStartSession={() => {
+            setView("readiness");
+          }}
         />
+        </>
       )}
 
-      <div className="mt-5 rounded-xl border border-zinc-700/60 p-4">
+      {false && (view === "setup" || view === "results") && <div className="mt-5 rounded-xl border border-zinc-700/60 p-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold">Recent Practice</h3>
           {isSavingRun && (
@@ -458,7 +615,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
             {runSaveError}
           </p>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

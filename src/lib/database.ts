@@ -9,7 +9,7 @@ export async function getDatabase() {
 
 async function addColumnIfMissing(
   database: Database,
-  table: "projects" | "sessions",
+	table: "projects" | "sessions" | "forgepulse_runs",
   column: string,
   definition: string
 ) {
@@ -97,6 +97,8 @@ export async function initializeDatabase() {
       FOREIGN KEY(session_id) REFERENCES sessions(id)
     );
   `);
+
+	await addColumnIfMissing(database, "forgepulse_runs", "timing_report_json", "TEXT");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS session_tuner_stats (

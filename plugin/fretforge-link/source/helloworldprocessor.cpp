@@ -117,6 +117,9 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
 
     if (data.numSamples <= 0)
         return kResultOk;
+	const auto processTimestamp = std::chrono::duration_cast<std::chrono::milliseconds> (
+		std::chrono::system_clock::now ().time_since_epoch ()).count ();
+	mLastProcessTimestampMs.store (processTimestamp, std::memory_order_release);
 
     const auto inputChannels = data.inputs[0].numChannels;
     const auto outputChannels = data.outputs[0].numChannels;
@@ -180,6 +183,10 @@ tresult PLUGIN_API HelloWorldProcessor::process (Vst::ProcessData& data)
         mInputRms.store (static_cast<float> (std::sqrt (sumSquares / sampleCount)), std::memory_order_relaxed);
         mInputPeak.store (peak, std::memory_order_relaxed);
     }
+	// Anchor the sample clock to this exact REAPER audio callback so a later
+	// telemetry write cannot make the detected attack appear late.
+	mAudioClockSample.store (mProcessedSamples.load (std::memory_order_acquire), std::memory_order_relaxed);
+	mAudioClockTimestampMs.store (processTimestamp, std::memory_order_release);
     return kResultOk;
 
 }
@@ -205,25 +212,41 @@ tresult PLUGIN_API HelloWorldProcessor::canProcessSampleSize (int32 symbolicSamp
 
 void HelloWorldProcessor::processAttackSample (float sample)
 {
-	const auto absolute = std::abs (sample);
+	const auto flux = std::abs (sample - mPreviousAttackSample);
+	mPreviousAttackSample = sample;
 	const auto sampleRate = std::max (1.0, mSampleRate.load (std::memory_order_relaxed));
 	const auto processed = mProcessedSamples.fetch_add (1, std::memory_order_relaxed) + 1;
 	++mSamplesSinceAttack;
-	const auto previousEnvelope = mAttackEnvelope;
-	const auto coefficient = absolute > mAttackEnvelope ? 0.18f : 0.0025f;
-	mAttackEnvelope += coefficient * (absolute - mAttackEnvelope);
-	if (mAttackEnvelope < 0.04f)
-		mNoiseFloor += 0.00015f * (mAttackEnvelope - mNoiseFloor);
-	const auto threshold = std::max (0.012f, mNoiseFloor * 5.0f);
-	const auto refractorySamples = static_cast<uint64_t> (sampleRate * 0.055);
-	const bool sharpRise = mAttackEnvelope > threshold && mAttackEnvelope > previousEnvelope * 1.12f;
-	if (!sharpRise || mSamplesSinceAttack < refractorySamples)
+	const auto fastCoefficient = flux > mFastAttackEnvelope ? 0.35f : 0.02f;
+	mFastAttackEnvelope += fastCoefficient * (flux - mFastAttackEnvelope);
+	mSlowAttackEnvelope += 0.003f * (flux - mSlowAttackEnvelope);
+	if (mSlowAttackEnvelope < 0.012f)
+		mNoiseFloor += 0.0001f * (mSlowAttackEnvelope - mNoiseFloor);
+	const auto threshold = std::max (0.0015f, mNoiseFloor * 3.5f);
+	const auto refractorySamples = static_cast<uint64_t> (sampleRate * 0.090);
+	const auto releaseSamples = static_cast<uint64_t> (sampleRate * 0.025);
+	const bool sharpRise = mFastAttackEnvelope > threshold &&
+		mFastAttackEnvelope > std::max (mSlowAttackEnvelope * 2.0f, threshold);
+	if (!mAttackArmed)
+	{
+		const bool settled = mFastAttackEnvelope < threshold * 0.85f ||
+			mFastAttackEnvelope < mSlowAttackEnvelope * 1.2f;
+		mAttackReleaseSamples = settled ? mAttackReleaseSamples + 1 : 0;
+		if (mAttackReleaseSamples >= releaseSamples && mSamplesSinceAttack >= refractorySamples)
+		{
+			mAttackArmed = true;
+			mAttackReleaseSamples = 0;
+		}
+	}
+	if (!mAttackArmed || !sharpRise || mSamplesSinceAttack < refractorySamples)
 		return;
 	mSamplesSinceAttack = 0;
+	mAttackArmed = false;
+	mAttackReleaseSamples = 0;
 	const auto sequence = mAttackSequence.fetch_add (1, std::memory_order_relaxed) + 1;
 	const auto slot = sequence % mAttackSampleIndices.size ();
 	mAttackSampleIndices[slot].store (processed, std::memory_order_release);
-	mAttackStrengths[slot].store (mAttackEnvelope, std::memory_order_release);
+	mAttackStrengths[slot].store (mFastAttackEnvelope, std::memory_order_release);
 }
 
 tresult PLUGIN_API HelloWorldProcessor::notify (Vst::IMessage* message)
@@ -259,12 +282,14 @@ void HelloWorldProcessor::startTelemetry ()
 	if (mTelemetryRunning.exchange (true))
 		return;
 	mTelemetryThread = std::thread ([this] {
+		uint32_t telemetryTick = 0;
 		while (mTelemetryRunning.load ())
 		{
 			refreshOutputGain ();
-			analyzePitch ();
+			if (telemetryTick++ % 3 == 0)
+				analyzePitch ();
 			writeTelemetry (true);
-			std::this_thread::sleep_for (std::chrono::milliseconds (75));
+			std::this_thread::sleep_for (std::chrono::milliseconds (25));
 		}
 		writeTelemetry (false);
 	});
@@ -350,6 +375,7 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 		<< ",\"instance_id\":\"" << mInstanceId << "\""
 		<< ",\"source_name\":\"" << sourceName << "\""
 		<< ",\"timestamp_ms\":" << timestamp
+		<< ",\"processing_active\":" << (timestamp - mLastProcessTimestampMs.load (std::memory_order_acquire) < 250 ? "true" : "false")
 		<< ",\"sample_rate\":" << mSampleRate.load (std::memory_order_relaxed)
 		<< ",\"input_rms\":" << mInputRms.load (std::memory_order_relaxed)
 		<< ",\"input_peak\":" << mInputPeak.load (std::memory_order_relaxed)
@@ -357,7 +383,11 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 		<< ",\"clarity\":" << mClarity.load (std::memory_order_relaxed);
 	output << ",\"output_gain\":" << mOutputGain.load (std::memory_order_relaxed);
 	const auto latestSequence = mAttackSequence.load (std::memory_order_acquire);
-	const auto processedSamples = mProcessedSamples.load (std::memory_order_acquire);
+	const auto audioClockTimestamp = mAudioClockTimestampMs.load (std::memory_order_acquire);
+	const auto processedSamples = audioClockTimestamp > 0
+		? mAudioClockSample.load (std::memory_order_relaxed)
+		: mProcessedSamples.load (std::memory_order_acquire);
+	const auto attackClockTimestamp = audioClockTimestamp > 0 ? audioClockTimestamp : timestamp;
 	const auto sampleRate = std::max (1.0, mSampleRate.load (std::memory_order_relaxed));
 	output << ",\"attacks\":[";
 	const auto firstSequence = latestSequence > mAttackSampleIndices.size () ? latestSequence - mAttackSampleIndices.size () + 1 : 1;
@@ -371,7 +401,7 @@ void HelloWorldProcessor::writeTelemetry (bool connected)
 		if (!firstAttack) output << ',';
 		firstAttack = false;
 		output << "{\"sequence\":" << sequence
-			<< ",\"timestamp_ms\":" << (timestamp - ageMilliseconds)
+			<< ",\"timestamp_ms\":" << (attackClockTimestamp - ageMilliseconds)
 			<< ",\"strength\":" << mAttackStrengths[slot].load (std::memory_order_relaxed) << '}';
 	}
 	output << ']'

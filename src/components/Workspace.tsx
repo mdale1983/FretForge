@@ -24,6 +24,7 @@ import ToneLabWorkspace from "./workspaces/ToneLabWorkspace";
 import SignalForgeWorkspace from "./workspaces/SignalForgeWorkspace";
 import WorkshopWorkspace from "./workspaces/WorkshopWorkspace";
 import StudioPathWorkspace from "./workspaces/StudioPathWorkspace";
+import MentorPortalWorkspace from "./workspaces/MentorPortalWorkspace";
 
 type WorkspaceProps = {
   activeModule: string;
@@ -281,6 +282,12 @@ function Workspace({
           {activeModule === "studio" && (
             <div className="col-span-full">
               <StudioPathWorkspace theme={theme} />
+            </div>
+          )}
+
+          {activeModule === "mentor" && (
+            <div className="col-span-full">
+              <MentorPortalWorkspace theme={theme} />
             </div>
           )}
 

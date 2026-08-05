@@ -115,7 +115,7 @@ export const modules = [
     id: "mentor",
     icon: Music,
     name: "Mentor Portal",
-    description: "ChatGPT review-package preparation without API dependency.",
+    description: "Practice history, progress trends, and focused performance review.",
   },
   {
     id: "coach",

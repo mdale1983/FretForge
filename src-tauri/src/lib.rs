@@ -8,6 +8,7 @@ use std::process::Command;
 use sysinfo::System;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream};
+use tauri::Manager;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
@@ -63,6 +64,13 @@ struct AudioInputDeviceInfo {
 }
 
 #[derive(Serialize)]
+struct VoiceCoachVoiceInfo {
+    name: String,
+    lang: String,
+    local: bool,
+}
+
+#[derive(Serialize)]
 struct StudioApplicationInfo {
     id: String,
     name: String,
@@ -78,6 +86,8 @@ struct StudioApplicationInfo {
 #[derive(Clone, Deserialize)]
 struct FretForgeLinkTelemetry {
     connected: bool,
+	#[serde(default)]
+	processing_active: bool,
     timestamp_ms: u64,
     sample_rate: f64,
     input_rms: f64,
@@ -112,6 +122,7 @@ struct FretForgeLinkState {
     instance_id: String,
     source_name: String,
     connected: bool,
+	processing_active: bool,
     installed: bool,
     sample_rate: f64,
     input_rms: f64,
@@ -120,6 +131,8 @@ struct FretForgeLinkState {
     frequency: f64,
     clarity: f64,
     attacks: Vec<FretForgeAttackTelemetry>,
+	telemetry_timestamp_ms: u64,
+	transport_delay_ms: u64,
 }
 
 struct StudioApplicationDefinition {
@@ -1092,18 +1105,21 @@ fn link_state(value: FretForgeLinkTelemetry, now_ms: u64) -> FretForgeLinkState 
     FretForgeLinkState {
         instance_id: value.instance_id, source_name: value.source_name,
         connected: value.connected && now_ms.saturating_sub(value.timestamp_ms) < 1_500,
+		processing_active: value.processing_active,
         installed: fretforge_link_is_installed(), sample_rate: value.sample_rate,
         input_rms: value.input_rms, input_peak: value.input_peak,
         plugin_version: value.plugin_version, frequency: value.frequency, clarity: value.clarity,
-        attacks: value.attacks,
+		attacks: value.attacks, telemetry_timestamp_ms: value.timestamp_ms,
+		transport_delay_ms: now_ms.saturating_sub(value.timestamp_ms),
     }
 }
 
 fn empty_link_state() -> FretForgeLinkState {
     FretForgeLinkState { instance_id: String::new(), source_name: "FretForge Link".to_string(),
-        connected: false, installed: fretforge_link_is_installed(), sample_rate: 0.0,
+        connected: false, processing_active: false, installed: fretforge_link_is_installed(), sample_rate: 0.0,
         input_rms: 0.0, input_peak: 0.0, plugin_version: String::new(),
-        frequency: 0.0, clarity: 0.0, attacks: Vec::new() }
+		frequency: 0.0, clarity: 0.0, attacks: Vec::new(), telemetry_timestamp_ms: 0,
+		transport_delay_ms: 0 }
 }
 
 #[tauri::command]
@@ -1140,12 +1156,118 @@ fn set_fretforge_link_gain(source_id: String, gain: f32) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn list_voice_coach_voices() -> Result<Vec<VoiceCoachVoiceInfo>, String> {
+    let script = r#"
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+try {
+  $synth.GetInstalledVoices() | ForEach-Object {
+    Write-Output ($_.VoiceInfo.Name + "`t" + $_.VoiceInfo.Culture.Name)
+  }
+} finally {
+  $synth.Dispose()
+}
+"#;
+    let result = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output().map_err(|error| format!("Could not list Windows speech voices: {error}"))?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&result.stdout).lines().filter_map(|line| {
+        let (name, lang) = line.trim().split_once('\t')?;
+        if name.is_empty() { return None; }
+        Some(VoiceCoachVoiceInfo { name: name.to_string(), lang: lang.to_string(), local: true })
+    }).collect())
+}
+
+#[tauri::command]
+async fn synthesize_voice_coach_audio(
+    message: String,
+    voice_name: Option<String>,
+    rate: f32,
+    pitch: f32,
+    volume: f32,
+) -> Result<Vec<u8>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if message.trim().is_empty() || message.len() > 1_000 {
+            return Err("The coaching phrase is invalid.".to_string());
+        }
+        let directory = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+            .ok_or_else(|| "Windows local application data is unavailable.".to_string())?
+            .join("FretForge").join("voice-cache");
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+        let output_path = directory.join(format!("coach-{unique}.wav"));
+        let script = r#"
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+try {
+  if ($env:FRETFORGE_TTS_VOICE) { try { $synth.SelectVoice($env:FRETFORGE_TTS_VOICE) } catch {} }
+  $synth.Volume = [Math]::Max(0, [Math]::Min(100, [int]$env:FRETFORGE_TTS_VOLUME))
+  $synth.SetOutputToWaveFile($env:FRETFORGE_TTS_OUTPUT)
+  $rate = [Math]::Round(([double]$env:FRETFORGE_TTS_RATE - 1.0) * 100)
+  $pitch = [Math]::Round(([double]$env:FRETFORGE_TTS_PITCH - 1.0) * 100)
+  $phrases = [regex]::Split($env:FRETFORGE_TTS_TEXT.Trim(), '(?<=[.!?])\s+')
+  $spoken = New-Object System.Collections.Generic.List[string]
+  foreach ($phrase in $phrases) {
+    if (-not $phrase) { continue }
+    $safe = [System.Security.SecurityElement]::Escape($phrase)
+    $safe = $safe -replace ',\s+', ",<break time='70ms'/> "
+    $spoken.Add($safe)
+  }
+  $text = [string]::Join("<break time='135ms'/>", $spoken)
+  $ssml = "<speak version='1.0' xml:lang='en-US'><prosody rate='$rate%' pitch='$pitch%'>$text</prosody></speak>"
+  $synth.SpeakSsml($ssml)
+} finally {
+  $synth.Dispose()
+}
+"#;
+        let result = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .env("FRETFORGE_TTS_TEXT", message)
+            .env("FRETFORGE_TTS_VOICE", voice_name.unwrap_or_default())
+            .env("FRETFORGE_TTS_RATE", rate.clamp(0.8, 1.15).to_string())
+            .env("FRETFORGE_TTS_PITCH", pitch.clamp(0.8, 1.2).to_string())
+            .env("FRETFORGE_TTS_VOLUME", (volume.clamp(0.0, 1.0) * 100.0).round().to_string())
+            .env("FRETFORGE_TTS_OUTPUT", &output_path)
+            .output().map_err(|error| format!("Could not start Windows speech synthesis: {error}"))?;
+        if !result.status.success() {
+            return Err(String::from_utf8_lossy(&result.stderr).trim().to_string());
+        }
+        let audio = std::fs::read(&output_path).map_err(|error| error.to_string())?;
+        let _ = std::fs::remove_file(output_path);
+        Ok(audio)
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let position = window.outer_position()?;
+                let size = window.outer_size()?;
+                let intersects_monitor = window.available_monitors()?.iter().any(|monitor| {
+                    let monitor_position = monitor.position();
+                    let monitor_size = monitor.size();
+                    position.x < monitor_position.x + monitor_size.width as i32
+                        && position.x + size.width as i32 > monitor_position.x
+                        && position.y < monitor_position.y + monitor_size.height as i32
+                        && position.y + size.height as i32 > monitor_position.y
+                });
+                if !intersects_monitor {
+                    window.center()?;
+                }
+                window.show()?;
+                window.set_focus()?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_workstation_telemetry,
@@ -1163,7 +1285,9 @@ pub fn run() {
             close_studio_application,
             list_fretforge_link_sources,
             get_fretforge_link_state,
-            set_fretforge_link_gain
+			set_fretforge_link_gain,
+			list_voice_coach_voices,
+			synthesize_voice_coach_audio
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

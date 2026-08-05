@@ -1,22 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  Subdivision,
-  TimeSignature,
-  TransportStatus,
-} from "../forgePulseTypes";
-import {
-  getPreferredAudioDeviceName,
-  routeAudioContextToPreferredDevice,
-} from "../../../services/audioRoutingService";
-
-const subdivisionMultiplier: Record<Subdivision, number> = {
-  whole: 0.25,
-  half: 0.5,
-  quarter: 1,
-  eighth: 2,
-  triplet: 3,
-  sixteenth: 4,
-};
+import type { Subdivision, TimeSignature, TransportStatus } from "../forgePulseTypes";
+import { getForgePulseAudioContext } from "../forgePulseAudioEngine";
 
 type UseMetronomeOptions = {
   bpm: number;
@@ -29,9 +13,26 @@ type UseMetronomeOptions = {
   volume: number;
 };
 
+type ClickKind = "count-in" | "count-in-final" | "beat" | "downbeat";
+
+const LOOK_AHEAD_SECONDS = 0.12;
+const SCHEDULER_INTERVAL_MS = 25;
+const CLICK_OUTPUT_BOOST = 1.4;
+
+function contextTimeToEpochMs(context: AudioContext, contextTime: number) {
+  const timestamp = context.getOutputTimestamp?.();
+	const anchorContextTime = timestamp?.contextTime ?? 0;
+	const anchorPerformanceTime = timestamp?.performanceTime ?? 0;
+  if (anchorContextTime > 0 && anchorPerformanceTime > 0) {
+	const targetPerformanceTime = anchorPerformanceTime + (contextTime - anchorContextTime) * 1_000;
+    return performance.timeOrigin + targetPerformanceTime;
+  }
+  return Date.now() + (contextTime - context.currentTime) * 1_000;
+}
+
 export function useMetronome({
   bpm,
-  subdivision,
+  subdivision: _subdivision,
   timeSignature,
   accentEnabled,
   countInEnabled,
@@ -44,73 +45,117 @@ export function useMetronome({
   const [currentSubdivision, setCurrentSubdivision] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [automaticCompletionCount, setAutomaticCompletionCount] = useState(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const clickTimeoutRef = useRef<number | null>(null);
+  const [measuredBpm, setMeasuredBpm] = useState(0);
+  const [measuredIntervalMs, setMeasuredIntervalMs] = useState(0);
+  const [clickJitterMs, setClickJitterMs] = useState(0);
+  const [practiceStartedAtMs, setPracticeStartedAtMs] = useState(0);
+
+  const schedulerIntervalRef = useRef<number | null>(null);
   const clockIntervalRef = useRef<number | null>(null);
+  const transitionTimeoutRef = useRef<number | null>(null);
+  const uiTimeoutsRef = useRef<number[]>([]);
+  const scheduledSourcesRef = useRef<AudioScheduledSourceNode[]>([]);
   const startedAtRef = useRef(0);
-  const elapsedSecondsRef = useRef(0);
   const runningRef = useRef(false);
-  const routedPreferenceRef = useRef("");
-  const stepRef = useRef(0);
+  const scheduleIndexRef = useRef(0);
+  const nextClickContextTimeRef = useRef(0);
+  const countInBeatsRef = useRef(0);
+  const scheduledPracticeTimesRef = useRef<number[]>([]);
 
   const beatsPerMeasure = Number(timeSignature.split("/")[0]);
-  const stepsPerBeat = subdivisionMultiplier[subdivision];
 
-  const playClick = useCallback((accent: boolean) => {
-    const AudioContextClass =
-      window.AudioContext ??
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
+  const prepareAudioContext = useCallback(async () => {
+    return getForgePulseAudioContext();
+  }, []);
 
-    if (!AudioContextClass) return;
-
-    const context =
-      audioContextRef.current ?? new AudioContextClass();
-    audioContextRef.current = context;
-
-    const preferredDevice = getPreferredAudioDeviceName();
-    if (preferredDevice !== routedPreferenceRef.current) {
-      routedPreferenceRef.current = preferredDevice;
-      routeAudioContextToPreferredDevice(context).catch((error) => {
-        console.warn("Preferred metronome output is unavailable:", error);
-      });
-    }
-
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const now = context.currentTime;
-
-    oscillator.frequency.value = accent ? 1_320 : 880;
+  const scheduleClick = useCallback((context: AudioContext, kind: ClickKind, atTime: number) => {
+    const isCountIn = kind === "count-in" || kind === "count-in-final";
+    const isAccent = kind === "downbeat" || kind === "count-in-final";
     const clickVolume = Math.max(0.01, Math.min(volume, 1));
-    gain.gain.setValueAtTime(
-      clickVolume * (accent ? 0.42 : 0.26),
-      now
-    );
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.05);
+
+    // Use a neutral drum pulse: a rim/cross-stick transient on every beat and
+    // a short kick layer on the downbeat. This feels musical without imposing
+    // a genre-specific drum groove on the exercise.
+    const impactDuration = isAccent ? 0.075 : 0.06;
+    const frameCount = Math.max(1, Math.ceil(context.sampleRate * impactDuration));
+    const impactBuffer = context.createBuffer(1, frameCount, context.sampleRate);
+    const impact = impactBuffer.getChannelData(0);
+    let previous = 0;
+    for (let index = 0; index < frameCount; index += 1) {
+      const white = Math.random() * 2 - 1;
+      previous = previous * 0.18 + white * 0.82;
+      impact[index] = previous * Math.exp(-index / (context.sampleRate * 0.016));
+    }
+    const impactSource = context.createBufferSource();
+    const impactFilter = context.createBiquadFilter();
+    const impactGain = context.createGain();
+    const limiter = context.createDynamicsCompressor();
+    const outputGain = context.createGain();
+    impactSource.buffer = impactBuffer;
+    impactFilter.type = "bandpass";
+    impactFilter.frequency.value = isCountIn ? 1_350 : isAccent ? 1_950 : 1_700;
+    impactFilter.Q.value = 1.05;
+    impactGain.gain.setValueAtTime(clickVolume * CLICK_OUTPUT_BOOST * (isAccent ? 1.65 : 1.5), atTime);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, atTime + impactDuration);
+    limiter.threshold.value = -10;
+    limiter.knee.value = 8;
+    limiter.ratio.value = 10;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.055;
+    outputGain.gain.value = 1.15;
+    impactSource.connect(impactFilter);
+    impactFilter.connect(impactGain);
+    impactGain.connect(limiter);
+
+    const body = context.createOscillator();
+    const bodyGain = context.createGain();
+    body.type = "sine";
+    if (isAccent) {
+      body.frequency.setValueAtTime(isCountIn ? 135 : 118, atTime);
+      body.frequency.exponentialRampToValueAtTime(isCountIn ? 78 : 68, atTime + 0.055);
+    } else {
+      body.frequency.value = isCountIn ? 620 : 720;
+    }
+    bodyGain.gain.setValueAtTime(clickVolume * CLICK_OUTPUT_BOOST * (isAccent ? 0.32 : 0.34), atTime);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, atTime + (isAccent ? 0.08 : 0.052));
+    body.connect(bodyGain);
+    bodyGain.connect(limiter);
+    limiter.connect(outputGain);
+    outputGain.connect(context.destination);
+
+    const sources: AudioScheduledSourceNode[] = [impactSource, body];
+    scheduledSourcesRef.current.push(...sources);
+    sources.forEach((source) => {
+      source.onended = () => {
+        scheduledSourcesRef.current = scheduledSourcesRef.current.filter((node) => node !== source);
+      };
+    });
+    impactSource.start(atTime);
+    impactSource.stop(atTime + impactDuration);
+    body.start(atTime);
+    body.stop(atTime + (isAccent ? 0.085 : 0.057));
   }, [volume]);
 
   const stop = useCallback(() => {
     const finalElapsedSeconds = runningRef.current
-      ? Math.floor((Date.now() - startedAtRef.current) / 1_000)
+      ? Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1_000))
       : 0;
-
-    if (clickTimeoutRef.current !== null) {
-      window.clearTimeout(clickTimeoutRef.current);
-      clickTimeoutRef.current = null;
-    }
-
-    if (clockIntervalRef.current !== null) {
-      window.clearInterval(clockIntervalRef.current);
-      clockIntervalRef.current = null;
-    }
-
-    stepRef.current = 0;
+    if (schedulerIntervalRef.current !== null) window.clearInterval(schedulerIntervalRef.current);
+    if (clockIntervalRef.current !== null) window.clearInterval(clockIntervalRef.current);
+    if (transitionTimeoutRef.current !== null) window.clearTimeout(transitionTimeoutRef.current);
+    uiTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    scheduledSourcesRef.current.forEach((source) => {
+      try { source.stop(); } catch { /* already stopped */ }
+    });
+    schedulerIntervalRef.current = null;
+    clockIntervalRef.current = null;
+    transitionTimeoutRef.current = null;
+    uiTimeoutsRef.current = [];
+    scheduledSourcesRef.current = [];
+    scheduleIndexRef.current = 0;
+    nextClickContextTimeRef.current = 0;
+    scheduledPracticeTimesRef.current = [];
     runningRef.current = false;
-    elapsedSecondsRef.current = finalElapsedSeconds;
     setElapsedSeconds(finalElapsedSeconds);
     setStatus("idle");
     setCurrentBeat(0);
@@ -121,84 +166,85 @@ export function useMetronome({
   const start = useCallback(async () => {
     stop();
     setElapsedSeconds(0);
-    elapsedSecondsRef.current = 0;
+    setMeasuredBpm(0);
+    setMeasuredIntervalMs(0);
+    setClickJitterMs(0);
+    setPracticeStartedAtMs(0);
 
-    if (audioContextRef.current?.state === "suspended") {
-      await audioContextRef.current.resume();
-    }
+    const context = await prepareAudioContext().catch((error) => {
+      console.warn("Preferred metronome output is unavailable:", error);
+      return null;
+    });
+    if (!context) return;
 
-    const subdivisionInterval = 60_000 / bpm / stepsPerBeat;
+    const beatIntervalSeconds = 60 / bpm;
     const countInBeats = countInEnabled ? beatsPerMeasure : 0;
-    let countInStep = 0;
+    countInBeatsRef.current = countInBeats;
+    scheduleIndexRef.current = 0;
+    nextClickContextTimeRef.current = context.currentTime + LOOK_AHEAD_SECONDS;
+    const practiceStartContextTime = nextClickContextTimeRef.current + countInBeats * beatIntervalSeconds;
+    const practiceStartEpoch = contextTimeToEpochMs(context, practiceStartContextTime);
+    startedAtRef.current = practiceStartEpoch;
+    setPracticeStartedAtMs(practiceStartEpoch);
+    setStatus(countInBeats > 0 ? "counting-in" : "playing");
 
-    const beginPractice = () => {
-      setStatus("playing");
-      startedAtRef.current = Date.now();
+    const beginPracticeDelay = Math.max(0, practiceStartEpoch - Date.now());
+    transitionTimeoutRef.current = window.setTimeout(() => {
       runningRef.current = true;
+      setStatus("playing");
+    }, beginPracticeDelay);
 
-      const tick = () => {
-        const step = stepRef.current;
-        const beat = Math.floor(step / stepsPerBeat) % beatsPerMeasure;
-        const subdivisionStep = Math.floor(step % stepsPerBeat);
-        const isDownbeat = beat === 0 && subdivisionStep === 0;
-
-        playClick(accentEnabled && isDownbeat);
-        setCurrentBeat(beat + 1);
-        setCurrentSubdivision(subdivisionStep + 1);
-        stepRef.current += 1;
-        clickTimeoutRef.current = window.setTimeout(tick, subdivisionInterval);
-      };
-
-      tick();
-      clockIntervalRef.current = window.setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1_000);
-        elapsedSecondsRef.current = elapsed;
-        setElapsedSeconds(elapsed);
-
-        if (timerEnabled && elapsed >= durationMinutes * 60) {
-          stop();
-          setAutomaticCompletionCount((count) => count + 1);
-        }
-      }, 250);
+    const updateDiagnostics = (scheduledEpoch: number) => {
+      const times = [...scheduledPracticeTimesRef.current.slice(-8), scheduledEpoch];
+      scheduledPracticeTimesRef.current = times;
+      if (times.length < 2) return;
+      const intervals = times.slice(1).map((time, index) => time - times[index]);
+      const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+      const jitter = Math.sqrt(intervals.reduce((sum, value) => sum + (value - average) ** 2, 0) / intervals.length);
+      setMeasuredIntervalMs(average);
+      setMeasuredBpm(60_000 / average);
+      setClickJitterMs(jitter);
     };
 
-    if (countInBeats > 0) {
-      setStatus("counting-in");
+    const scheduler = () => {
+      const horizon = context.currentTime + LOOK_AHEAD_SECONDS;
+      while (nextClickContextTimeRef.current <= horizon) {
+        const sequenceIndex = scheduleIndexRef.current;
+        const isCountIn = sequenceIndex < countInBeatsRef.current;
+        const practiceStep = sequenceIndex - countInBeatsRef.current;
+        const beat = isCountIn ? sequenceIndex : practiceStep % beatsPerMeasure;
+        const kind: ClickKind = isCountIn
+          ? sequenceIndex === countInBeatsRef.current - 1 ? "count-in-final" : "count-in"
+          : accentEnabled && beat === 0 ? "downbeat" : "beat";
+        const clickContextTime = nextClickContextTimeRef.current;
+        const clickEpoch = contextTimeToEpochMs(context, clickContextTime);
+        scheduleClick(context, kind, clickContextTime);
+        if (!isCountIn) updateDiagnostics(clickEpoch);
+        const uiDelay = Math.max(0, clickEpoch - Date.now());
+        const uiTimeout = window.setTimeout(() => {
+          setCurrentBeat(beat + 1);
+          setCurrentSubdivision(1);
+        }, uiDelay);
+        uiTimeoutsRef.current.push(uiTimeout);
+        scheduleIndexRef.current += 1;
+        nextClickContextTimeRef.current += beatIntervalSeconds;
+      }
+    };
 
-      const countInTick = () => {
-        playClick(countInStep === 0);
-        setCurrentBeat(countInStep + 1);
-        countInStep += 1;
+    scheduler();
+    schedulerIntervalRef.current = window.setInterval(scheduler, SCHEDULER_INTERVAL_MS);
+    clockIntervalRef.current = window.setInterval(() => {
+      if (!runningRef.current) return;
+      const elapsed = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1_000));
+      setElapsedSeconds(elapsed);
+      if (timerEnabled && elapsed >= durationMinutes * 60) {
+        stop();
+        setAutomaticCompletionCount((count) => count + 1);
+      }
+    }, 250);
+  }, [accentEnabled, beatsPerMeasure, bpm, countInEnabled, durationMinutes, prepareAudioContext, scheduleClick, stop, timerEnabled]);
 
-        if (countInStep < countInBeats) {
-          clickTimeoutRef.current = window.setTimeout(countInTick, 60_000 / bpm);
-        } else {
-          clickTimeoutRef.current = window.setTimeout(beginPractice, 60_000 / bpm);
-        }
-      };
-
-      countInTick();
-    } else {
-      beginPractice();
-    }
-  }, [
-    accentEnabled,
-    beatsPerMeasure,
-    bpm,
-    countInEnabled,
-    durationMinutes,
-    playClick,
-    stepsPerBeat,
-    stop,
-    timerEnabled,
-  ]);
-
-  useEffect(
-    () => () => {
-      stop();
-    },
-    [stop]
-  );
+  useEffect(() => () => { stop(); }, [stop]);
 
   return {
     status,
@@ -206,6 +252,10 @@ export function useMetronome({
     currentSubdivision,
     elapsedSeconds,
     automaticCompletionCount,
+    measuredBpm,
+    measuredIntervalMs,
+    clickJitterMs,
+    practiceStartedAtMs,
     start,
     stop,
   };

@@ -15,6 +15,24 @@ export type ForgePulseRun = {
   time_signature: TimeSignature;
   duration_seconds: number;
   completed_at: string;
+	timing_report_json: string | null;
+};
+
+export type ForgePulseTimingReport = {
+	scoredCount: number;
+	lockedCount: number;
+	greatCount: number;
+	goodCount: number;
+	onTempoCount: number;
+	offTempoCount: number;
+	missedCount: number;
+	extraCount: number;
+	medianOffsetMs: number;
+	medianAbsoluteErrorMs: number;
+	consistencyMs: number;
+	driftMs: number;
+	pocket: "ahead" | "centered" | "behind";
+	confidence: "low" | "moderate" | "high";
 };
 
 export type ForgePulseSummary = {
@@ -31,6 +49,7 @@ type SaveForgePulseRunInput = {
   subdivision: Subdivision;
   timeSignature: TimeSignature;
   durationSeconds: number;
+	timingReport: ForgePulseTimingReport | null;
 };
 
 export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
@@ -46,9 +65,10 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
       subdivision,
       time_signature,
       duration_seconds,
+	  timing_report_json,
       completed_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       input.projectId,
@@ -58,6 +78,7 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
       input.subdivision,
       input.timeSignature,
       input.durationSeconds,
+	  input.timingReport ? JSON.stringify(input.timingReport) : null,
       new Date().toISOString(),
     ]
   );

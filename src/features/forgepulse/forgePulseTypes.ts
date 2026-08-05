@@ -24,7 +24,9 @@ export type ForgePulseMode =
 
 export type ForgePulseView =
   | "setup"
-  | "session";
+  | "readiness"
+  | "session"
+  | "results";
 
 export type TimeSignature =
   | "2/4"
