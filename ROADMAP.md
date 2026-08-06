@@ -4,7 +4,7 @@ FretForge is a practical guitar workstation and coach. Product feedback should
 remain musical, specific, and useful. Avoid points, badges, levels, streak
 pressure, and other gamification mechanics.
 
-## Current focus: Mentor Portal
+## Completed foundation: Mentor Portal
 
 - [x] Compare like-for-like ForgePulse sessions instead of mixing unrelated
   tempos and subdivisions.
@@ -22,6 +22,18 @@ pressure, and other gamification mechanics.
 - Add longer-term views by project, technique, and date after the underlying
   session data is reliable.
 - Keep detailed review in Mentor Portal rather than cluttering ForgePulse.
+
+## Current focus: Integrated Practice
+
+- [x] Give each ForgePulse run a real exercise identity instead of relying on
+  generic mode labels.
+- [x] Provide clear goals and playing instructions for each timing exercise.
+- [x] Carry Mentor recommendations back into ForgePulse with the prescribed
+  exercise, tempo, time signature, and scoring strictness.
+- [x] Link post-session results directly to the saved Mentor review.
+- [ ] Add technique-specific analyzers only when FretForge can measure them
+  honestly. Bends, vibrato, slides, articulation, and chords must not reuse
+  attack-timing scores as a fake proxy for technique quality.
 
 ## Planned: JamForge Riff Capture
 

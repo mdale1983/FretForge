@@ -1,5 +1,8 @@
 type ForgePulseReadinessViewProps = {
   theme: string;
+  exerciseName: string;
+  exerciseInstructions: string;
+  bpm: number;
   dawName: string;
   dawInstalled: boolean;
   dawRunning: boolean;
@@ -18,7 +21,7 @@ type ForgePulseReadinessViewProps = {
 };
 
 export function ForgePulseReadinessView({
-  theme, dawName, dawInstalled, dawRunning, isLaunchingDaw, dawLaunchError,
+  theme, exerciseName, exerciseInstructions, bpm, dawName, dawInstalled, dawRunning, isLaunchingDaw, dawLaunchError,
   linkConnected, processingActive, sourceName, inputLevel, signalVerified, guitarVolume,
   onGuitarVolumeChange, onLaunchDaw, onBack, onStart,
 }: ForgePulseReadinessViewProps) {
@@ -30,6 +33,8 @@ export function ForgePulseReadinessView({
       <p className="text-xs uppercase tracking-[0.18em] text-orange-400">Audio check</p>
       <h3 className="mt-2 text-xl font-semibold">Get your rig ready</h3>
       <p className="mt-2 text-sm text-zinc-400">FretForge will unlock the session after it verifies the DAW, FretForge Link, and a live guitar signal.</p>
+
+      <div className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4"><p className="text-xs uppercase tracking-wide text-orange-400">Up next</p><p className="mt-1 font-semibold">{exerciseName} · {bpm} BPM</p><p className="mt-2 text-sm text-zinc-400">{exerciseInstructions}</p></div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         <CheckCard label="DAW" value={dawRunning ? `${dawName} is running` : `${dawName} is closed`} complete={dawRunning} />

@@ -245,7 +245,7 @@ function Workspace({
 
           {activeModule === "pulse" && (
             <div className="col-span-full">
-              <ForgePulseWorkspace theme={theme} />
+              <ForgePulseWorkspace theme={theme} onOpenMentor={() => setActiveModule("mentor")} />
             </div>
           )}
 

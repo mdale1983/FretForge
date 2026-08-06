@@ -1,4 +1,4 @@
-import { subdivisionInstructions, subdivisionLabels } from "../forgePulseConstants";
+import { subdivisionLabels } from "../forgePulseConstants";
 import type {
   Subdivision,
   TimeSignature,
@@ -11,6 +11,7 @@ import type { VoiceCoachFrequency } from "../hooks/useVoiceCoach";
 type ForgePulseSessionViewProps = {
   theme: string;
   sessionTitle: string;
+  exerciseInstructions: string;
   bpm: number;
   measuredBpm: number;
   measuredIntervalMs: number;
@@ -52,6 +53,7 @@ function formatDuration(totalSeconds: number) {
 export function ForgePulseSessionView({
   theme,
   sessionTitle,
+  exerciseInstructions,
   bpm,
   measuredBpm,
   measuredIntervalMs,
@@ -146,7 +148,7 @@ export function ForgePulseSessionView({
       <div className="mt-3 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p>
-          <p className="text-sm leading-relaxed">{subdivisionInstructions[subdivision]}</p>
+          <p className="text-sm leading-relaxed">{exerciseInstructions}</p>
         </div>
         {voiceCoachFrequency !== "off" && voiceCoachSupported && (
           <>

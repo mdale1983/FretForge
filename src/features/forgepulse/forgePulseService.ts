@@ -18,6 +18,7 @@ export type ForgePulseRun = {
   completed_at: string;
 	timing_report_json: string | null;
   timing_strictness: TimingStrictness | null;
+  exercise_id: string | null;
   project_name?: string | null;
   session_name?: string | null;
 };
@@ -46,6 +47,7 @@ export type ForgePulseSummary = {
 };
 
 type SaveForgePulseRunInput = {
+  exerciseId: string;
   projectId: number | null;
   sessionId: number | null;
   mode: ForgePulseMode;
@@ -63,6 +65,7 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
   await database.execute(
     `
     INSERT INTO forgepulse_runs (
+      exercise_id,
       project_id,
       session_id,
       mode,
@@ -74,9 +77,10 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
 	  timing_strictness,
       completed_at
     )
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
+      input.exerciseId,
       input.projectId,
       input.sessionId,
       input.mode,

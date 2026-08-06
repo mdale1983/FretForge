@@ -1,20 +1,23 @@
 import { useState } from "react";
-import { subdivisionInstructions, subdivisionLabels } from "../forgePulseConstants";
+import { subdivisionLabels } from "../forgePulseConstants";
 import { VoiceCoachSettingsPanel } from "../../voice-coach/components/VoiceCoachSettingsPanel";
 import { ForgePulseCard } from "./ForgePulseCard";
-import type { ForgePulseMode, Subdivision, TimeSignature } from "../forgePulseTypes";
+import type { Subdivision, TimeSignature } from "../forgePulseTypes";
 import type { VoiceCoachFrequency, VoiceCoachVoice } from "../hooks/useVoiceCoach";
 import type { TimingStrictness } from "../hooks/useTimingCoach";
+import type { PracticeExercise } from "../practiceExerciseCatalog";
 
 type ForgePulseSetupViewProps = {
-  theme: string; mode: ForgePulseMode; bpm: number; subdivision: Subdivision; timeSignature: TimeSignature;
-  modeTitle: string; modeDifficulty: string; modeObjective: string; modeDescription: string; sessionTitle: string;
+  theme: string; bpm: number; subdivision: Subdivision; timeSignature: TimeSignature;
+  exerciseId: string; exercises: PracticeExercise[]; exercise: PracticeExercise;
+  recommendedByMentor: boolean;
   countInEnabled: boolean; timerEnabled: boolean; durationMinutes: number; volume: number; accentEnabled: boolean;
   voiceCoachFrequency: VoiceCoachFrequency; voiceCoachVolume: number; voiceDuringPlay: boolean; voiceEndSummary: boolean;
   voiceCoachSupported: boolean; voiceCoachVoices: VoiceCoachVoice[]; voiceCoachVoice: string; voiceCoachRate: number; voiceCoachPitch: number;
   timingStrictness: TimingStrictness;
-  onModeChange: (value: ForgePulseMode) => void; onBpmChange: (value: number) => void;
-  onSubdivisionChange: (value: Subdivision) => void; onTimeSignatureChange: (value: TimeSignature) => void;
+  onBpmChange: (value: number) => void;
+  onExerciseChange: (value: string) => void;
+  onTimeSignatureChange: (value: TimeSignature) => void;
   onCountInChange: (value: boolean) => void; onTimerChange: (value: boolean) => void; onDurationChange: (value: number) => void;
   onVolumeChange: (value: number) => void; onAccentChange: (value: boolean) => void;
   onVoiceCoachFrequencyChange: (value: VoiceCoachFrequency) => void; onVoiceCoachVolumeChange: (value: number) => void;
@@ -34,18 +37,13 @@ export function ForgePulseSetupView(props: ForgePulseSetupViewProps) {
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <ForgePulseCard theme={theme} title="Quick Setup">
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs uppercase tracking-wide text-zinc-500">Mode
-              <select className={fieldClass} value={props.mode} onChange={(event) => props.onModeChange(event.target.value as ForgePulseMode)}>
-                <option value="learn">Learn</option><option value="practice">Practice</option><option value="follow">Follow</option><option value="master">Master</option>
+            <label className="text-xs uppercase tracking-wide text-zinc-500 sm:col-span-2">Practice Exercise
+              <select className={fieldClass} value={props.exerciseId} onChange={(event) => props.onExerciseChange(event.target.value)}>
+                {props.exercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name} · {exercise.skill} · {exercise.difficulty}</option>)}
               </select>
             </label>
             <label className="text-xs uppercase tracking-wide text-zinc-500">BPM
               <input className={fieldClass} type="number" min={40} max={240} value={props.bpm} onChange={(event) => props.onBpmChange(Number(event.target.value))} />
-            </label>
-            <label className="text-xs uppercase tracking-wide text-zinc-500">Subdivision
-              <select className={fieldClass} value={props.subdivision} onChange={(event) => props.onSubdivisionChange(event.target.value as Subdivision)}>
-                <option value="whole">Whole Notes</option><option value="half">Half Notes</option><option value="quarter">Quarter Notes</option><option value="eighth">Eighth Notes</option><option value="triplet">Eighth-Note Triplets</option><option value="sixteenth">Sixteenth Notes</option>
-              </select>
             </label>
             <label className="text-xs uppercase tracking-wide text-zinc-500">Time Signature
               <select className={fieldClass} value={props.timeSignature} onChange={(event) => props.onTimeSignatureChange(event.target.value as TimeSignature)}>
@@ -91,9 +89,10 @@ export function ForgePulseSetupView(props: ForgePulseSetupViewProps) {
 
         <div className="lg:col-span-2">
           <ForgePulseCard theme={theme} title="Current Session">
+            {props.recommendedByMentor && <p className="mt-3 inline-flex rounded-full bg-orange-500/15 px-3 py-1 text-xs font-medium text-orange-400">Recommended by Mentor Portal</p>}
             <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-              <div><h3 className="text-sm font-semibold">{props.modeTitle}</h3><p className="mt-2 text-xs uppercase tracking-wide text-zinc-500">Difficulty</p><p className="mt-1 text-sm">{props.modeDifficulty}</p><p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">Goal</p><p className="mt-1 text-sm">{props.modeObjective}</p></div>
-              <div><p className="text-xs uppercase tracking-wide text-zinc-500">Session</p><h4 className="mt-1 text-sm font-semibold">{props.sessionTitle}</h4><p className="mt-2 text-sm leading-relaxed">{props.modeDescription}</p><p className="mt-2 text-sm text-zinc-500">{props.bpm} BPM · {subdivisionLabels[props.subdivision]} · {props.timeSignature}</p><div className="mt-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3"><p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p><p className="mt-2 text-sm leading-relaxed">{subdivisionInstructions[props.subdivision]}</p></div></div>
+              <div><h3 className="text-sm font-semibold">{props.exercise.name}</h3><p className="mt-2 text-xs uppercase tracking-wide text-zinc-500">Skill</p><p className="mt-1 text-sm">{props.exercise.skill}</p><p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">Difficulty</p><p className="mt-1 text-sm">{props.exercise.difficulty}</p></div>
+              <div><p className="text-xs uppercase tracking-wide text-zinc-500">Goal</p><p className="mt-1 text-sm leading-relaxed">{props.exercise.objective}</p><p className="mt-2 text-sm text-zinc-500">{props.bpm} BPM · {subdivisionLabels[props.subdivision]} · {props.timeSignature}</p><div className="mt-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3"><p className="text-xs uppercase tracking-wide text-orange-400">How to play it</p><p className="mt-2 text-sm leading-relaxed">{props.exercise.instructions}</p></div></div>
             </div>
             <div className="mt-4 flex justify-end border-t border-zinc-700/60 pt-4"><button type="button" onClick={props.onStartSession} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white">Set Up Session</button></div>
           </ForgePulseCard>

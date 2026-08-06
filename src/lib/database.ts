@@ -100,6 +100,7 @@ export async function initializeDatabase() {
 
 	await addColumnIfMissing(database, "forgepulse_runs", "timing_report_json", "TEXT");
 	await addColumnIfMissing(database, "forgepulse_runs", "timing_strictness", "TEXT");
+	await addColumnIfMissing(database, "forgepulse_runs", "exercise_id", "TEXT");
 
   await database.execute(`
     CREATE TABLE IF NOT EXISTS session_tuner_stats (

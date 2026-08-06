@@ -38,22 +38,22 @@ import {
 } from "../../features/forgepulse/forgePulseTypes";
 
 import {
-  modeTitles,
-  modeDifficulty,
-  modeObjectives,
-  modeDescriptions,
-  modeSessionTitles,
-} from "../../features/forgepulse/forgePulseConstants";
+  getPracticeExercise,
+  practiceExercises,
+} from "../../features/forgepulse/practiceExerciseCatalog";
 
 type ForgePulseWorkspaceProps = {
   theme: string;
+  onOpenMentor: () => void;
 };
 
-function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
+function ForgePulseWorkspace({ theme, onOpenMentor }: ForgePulseWorkspaceProps) {
   const [initialPreferences] = useState(loadForgePulsePreferences);
 
   // Setup and session navigation
-  const [mode, setMode] = useState<ForgePulseMode>(initialPreferences.mode);
+  const [mode] = useState<ForgePulseMode>("practice");
+  const [exerciseId, setExerciseId] = useState(initialPreferences.exerciseId);
+  const [recommendedByMentor, setRecommendedByMentor] = useState(() => localStorage.getItem("fretforge.forgepulse.fromMentor") === "true");
   const [view, setView] = useState<ForgePulseView>("setup");
 
   // Session timing configuration
@@ -62,6 +62,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     useState<Subdivision>(initialPreferences.subdivision);
   const [timeSignature, setTimeSignature] =
     useState<TimeSignature>(initialPreferences.timeSignature);
+  const currentExercise = getPracticeExercise(exerciseId);
 
   // Optional session behavior
   const [countInEnabled, setCountInEnabled] = useState(
@@ -212,6 +213,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
 
   useEffect(() => {
     saveForgePulsePreferences({
+      exerciseId,
       mode,
       bpm,
       subdivision,
@@ -227,6 +229,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     bpm,
     countInEnabled,
     durationMinutes,
+    exerciseId,
     mode,
     subdivision,
     timeSignature,
@@ -266,6 +269,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         ]);
 
         await saveForgePulseRun({
+          exerciseId,
           projectId,
           sessionId,
           mode,
@@ -305,6 +309,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
     },
     [
       bpm,
+      exerciseId,
       loadPracticeSummary,
       mode,
       subdivision,
@@ -401,7 +406,8 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       {view === "session" && (
         <ForgePulseSessionView
           theme={theme}
-          sessionTitle={modeSessionTitles[mode]}
+          sessionTitle={currentExercise.name}
+          exerciseInstructions={currentExercise.instructions}
           bpm={bpm}
 		  measuredBpm={metronome.measuredBpm}
 		  measuredIntervalMs={metronome.measuredIntervalMs}
@@ -441,6 +447,9 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       {view === "readiness" && (
         <ForgePulseReadinessView
           theme={theme}
+          exerciseName={currentExercise.name}
+          exerciseInstructions={currentExercise.instructions}
+          bpm={bpm}
           dawName={preferredDaw?.name ?? "your preferred DAW"}
           dawInstalled={preferredDaw?.installed ?? false}
           dawRunning={preferredDaw?.running ?? false}
@@ -463,8 +472,11 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         <ForgePulseResultsView
           theme={theme}
           timing={timingCoach}
+          exerciseName={currentExercise.name}
+          isSaving={isSavingRun}
           onAgain={() => setView("readiness")}
           onSetup={() => setView("setup")}
+          onReview={onOpenMentor}
         />
       )}
 
@@ -488,15 +500,13 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
         {runSaveError && <p className="mt-3 text-sm text-red-400" role="alert">{runSaveError}</p>}
         <ForgePulseSetupView
           theme={theme}
-          mode={mode}
+          exerciseId={exerciseId}
+          exercises={practiceExercises}
+          exercise={currentExercise}
+          recommendedByMentor={recommendedByMentor}
           bpm={bpm}
           subdivision={subdivision}
           timeSignature={timeSignature}
-          modeTitle={modeTitles[mode]}
-          modeDifficulty={modeDifficulty[mode]}
-          modeObjective={modeObjectives[mode]}
-          modeDescription={modeDescriptions[mode]}
-          sessionTitle={modeSessionTitles[mode]}
           countInEnabled={countInEnabled}
           timerEnabled={timerEnabled}
           durationMinutes={durationMinutes}
@@ -512,9 +522,15 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
 		  voiceCoachRate={voiceCoachRate}
 		  voiceCoachPitch={voiceCoachPitch}
           timingStrictness={timingStrictness}
-          onModeChange={setMode}
+          onExerciseChange={(nextExerciseId) => {
+            const exercise = getPracticeExercise(nextExerciseId);
+            setExerciseId(exercise.id);
+            setSubdivision(exercise.subdivision);
+            setBpm(exercise.recommendedBpm);
+            setRecommendedByMentor(false);
+            localStorage.removeItem("fretforge.forgepulse.fromMentor");
+          }}
           onBpmChange={setBpm}
-          onSubdivisionChange={setSubdivision}
           onTimeSignatureChange={setTimeSignature}
           onCountInChange={setCountInEnabled}
           onTimerChange={setTimerEnabled}

@@ -12,6 +12,10 @@ import {
   loadForgePulsePreferences,
   saveForgePulsePreferences,
 } from "../../features/forgepulse/forgePulsePreferences";
+import {
+  getPracticeExercise,
+  inferLegacyExerciseId,
+} from "../../features/forgepulse/practiceExerciseCatalog";
 
 type MentorPortalWorkspaceProps = { theme: string; onOpenForgePulse: () => void };
 
@@ -53,7 +57,11 @@ function strictnessLabel(run: ForgePulseRun) {
 }
 
 function exerciseKey(run: ForgePulseRun) {
-  return `${run.mode}|${run.subdivision}|${run.time_signature}|${run.timing_strictness ?? "legacy"}`;
+  return `${run.exercise_id ?? inferLegacyExerciseId(run.subdivision)}|${run.mode}|${run.time_signature}|${run.timing_strictness ?? "legacy"}`;
+}
+
+function exerciseForRun(run: ForgePulseRun) {
+  return getPracticeExercise(run.exercise_id ?? inferLegacyExerciseId(run.subdivision));
 }
 
 function comparisonKey(run: ForgePulseRun) {
@@ -61,14 +69,14 @@ function comparisonKey(run: ForgePulseRun) {
 }
 
 function recommendation(reviewed: ReviewedRun | null) {
-  if (!reviewed) return { title: "Build a timing baseline", detail: "Complete a scored ForgePulse session so Mentor Portal can recommend the next step." };
+  if (!reviewed) return { title: "Build a timing baseline", detail: "Complete a scored ForgePulse session so Mentor Portal can recommend the next step.", targetBpm: 120 };
   const { run, report, onTempoPercent } = reviewed;
-  if (report.confidence === "low") return { title: "Improve the measurement first", detail: "Verify the guitar signal, then repeat this exercise for a longer run before changing tempo." };
-  if (onTempoPercent >= 80 && report.consistencyMs <= 60) return { title: `Try ${run.bpm + 5} BPM`, detail: "Your placement is stable enough for a small tempo increase. Keep the same exercise and timing strictness." };
-  if (onTempoPercent >= 60) return { title: `Stay at ${run.bpm} BPM`, detail: "Repeat this exercise and make the attacks more even before increasing speed." };
+  if (report.confidence === "low") return { title: "Improve the measurement first", detail: "Verify the guitar signal, then repeat this exercise for a longer run before changing tempo.", targetBpm: run.bpm };
+  if (onTempoPercent >= 80 && report.consistencyMs <= 60) return { title: `Try ${run.bpm + 5} BPM`, detail: "Your placement is stable enough for a small tempo increase. Keep the same exercise and timing strictness.", targetBpm: run.bpm + 5 };
+  if (onTempoPercent >= 60) return { title: `Stay at ${run.bpm} BPM`, detail: "Repeat this exercise and make the attacks more even before increasing speed.", targetBpm: run.bpm };
   const nextBpm = Math.max(30, run.bpm - (onTempoPercent < 40 ? 10 : 5));
   const tendency = report.pocket === "ahead" ? "rushing" : report.pocket === "behind" ? "dragging" : "moving around the beat";
-  return { title: `Return to ${nextBpm} BPM`, detail: `This run was mostly outside the target window and tended toward ${tendency}. Rebuild consistency before returning to ${run.bpm} BPM.` };
+  return { title: `Return to ${nextBpm} BPM`, detail: `This run was mostly outside the target window and tended toward ${tendency}. Rebuild consistency before returning to ${run.bpm} BPM.`, targetBpm: nextBpm };
 }
 
 function coachReview(reviewed: ReviewedRun | null) {
@@ -95,7 +103,7 @@ function practiceDirection(runs: ForgePulseRun[]) {
   const latest = focus.items[0];
   const next = recommendation(latest);
   return {
-    title: `${latest.run.bpm} BPM · ${latest.run.subdivision}`,
+    title: `${exerciseForRun(latest.run).name} · ${latest.run.bpm} BPM`,
     detail: next.detail,
     evidence: `${focus.averagePercent}% average across ${focus.items.length} comparable sessions · ${strictnessLabel(latest.run)} · ${next.title}`,
   };
@@ -133,7 +141,7 @@ export default function MentorPortalWorkspace({ theme, onOpenForgePulse }: Mento
   }, [runs]);
   const exerciseOptions = useMemo(() => {
     const options = new Map<string, string>();
-    runs.forEach((run) => options.set(exerciseKey(run), `${run.mode} · ${run.subdivision} · ${run.time_signature} · ${strictnessLabel(run)}`));
+    runs.forEach((run) => options.set(exerciseKey(run), `${exerciseForRun(run).name} · ${run.mode} · ${run.time_signature} · ${strictnessLabel(run)}`));
     return [...options.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [runs]);
   const filteredRuns = useMemo(() => runs.filter((run) => {
@@ -165,8 +173,9 @@ export default function MentorPortalWorkspace({ theme, onOpenForgePulse }: Mento
   function practiceSelectedRun() {
     if (!selectedRun) return;
     const preferences = loadForgePulsePreferences();
-    saveForgePulsePreferences({ ...preferences, mode: selectedRun.mode, bpm: selectedRun.bpm, subdivision: selectedRun.subdivision, timeSignature: selectedRun.time_signature });
+    saveForgePulsePreferences({ ...preferences, exerciseId: selectedRun.exercise_id ?? inferLegacyExerciseId(selectedRun.subdivision), mode: "practice", bpm: nextStep.targetBpm, subdivision: selectedRun.subdivision, timeSignature: selectedRun.time_signature });
     if (selectedRun.timing_strictness) localStorage.setItem("fretforge.timingStrictness", selectedRun.timing_strictness);
+    localStorage.setItem("fretforge.forgepulse.fromMentor", "true");
     onOpenForgePulse();
   }
 
@@ -200,9 +209,9 @@ export default function MentorPortalWorkspace({ theme, onOpenForgePulse }: Mento
       {!error && runs.length === 0 && <div className={`rounded-xl border p-8 text-center ${surface}`}><h2 className="font-semibold">No practice reviews yet</h2><p className="mt-2 text-sm text-zinc-500">Complete a ForgePulse session to begin building your progress history.</p><button type="button" onClick={onOpenForgePulse} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-black"><Play size={16} />Open ForgePulse</button></div>}
 
       {runs.length > 0 && <div className="grid min-h-[520px] gap-5 xl:grid-cols-[minmax(260px,0.7fr)_minmax(0,1.3fr)]">
-        <section className={`rounded-xl border p-4 ${surface}`}><div className="mb-3"><h2 className="font-semibold">Practice History</h2><p className="mt-1 text-xs text-zinc-500">Select a session to review its results.</p></div><div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">{filteredRuns.map((run) => { const reviewed = reviewRun(run); return <button key={run.id} type="button" onClick={() => setSelectedId(run.id)} className={`w-full rounded-lg border p-3 text-left transition-colors ${selectedRun?.id === run.id ? "border-orange-500 bg-orange-500/10" : theme === "dark" ? "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700" : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"}`}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{run.bpm} BPM</span><span className="text-xs text-zinc-500">{new Date(run.completed_at).toLocaleDateString()}</span></div><p className="mt-1 text-xs capitalize text-zinc-500">{run.mode} · {run.subdivision} · {run.time_signature} · {strictnessLabel(run)}</p><p className="mt-1 truncate text-xs text-zinc-500">{run.project_name ?? "Unassigned project"}{run.session_name ? ` · ${run.session_name}` : ""}</p><p className="mt-2 text-sm">{reviewed ? `${reviewed.onTempoPercent}% on tempo or better` : "Timing report unavailable"}</p></button>; })}{filteredRuns.length === 0 && <p className="rounded-lg border border-zinc-700/60 p-4 text-sm text-zinc-500">No practice sessions match these filters.</p>}</div></section>
+        <section className={`rounded-xl border p-4 ${surface}`}><div className="mb-3"><h2 className="font-semibold">Practice History</h2><p className="mt-1 text-xs text-zinc-500">Select a session to review its results.</p></div><div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">{filteredRuns.map((run) => { const reviewed = reviewRun(run); return <button key={run.id} type="button" onClick={() => setSelectedId(run.id)} className={`w-full rounded-lg border p-3 text-left transition-colors ${selectedRun?.id === run.id ? "border-orange-500 bg-orange-500/10" : theme === "dark" ? "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700" : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"}`}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{exerciseForRun(run).name}</span><span className="text-xs text-zinc-500">{new Date(run.completed_at).toLocaleDateString()}</span></div><p className="mt-1 text-xs capitalize text-zinc-500">{run.bpm} BPM · {run.mode} · {run.time_signature} · {strictnessLabel(run)}</p><p className="mt-1 truncate text-xs text-zinc-500">{run.project_name ?? "Unassigned project"}{run.session_name ? ` · ${run.session_name}` : ""}</p><p className="mt-2 text-sm">{reviewed ? `${reviewed.onTempoPercent}% on tempo or better` : "Timing report unavailable"}</p></button>; })}{filteredRuns.length === 0 && <p className="rounded-lg border border-zinc-700/60 p-4 text-sm text-zinc-500">No practice sessions match these filters.</p>}</div></section>
 
-        <section className={`rounded-xl border p-5 ${surface}`}>{selectedRun && <><div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-700/60 pb-4"><div><p className="text-xs uppercase tracking-wide text-zinc-500">Practice Review</p><h2 className="mt-1 text-xl font-semibold">{selectedRun.bpm} BPM · <span className="capitalize">{selectedRun.subdivision}</span></h2><p className="mt-1 text-sm text-zinc-500">{selectedRun.project_name ?? "Unassigned project"}{selectedRun.session_name ? ` · ${selectedRun.session_name}` : ""}</p><p className="mt-1 text-sm text-zinc-500">{new Date(selectedRun.completed_at).toLocaleString()} · {formatDuration(selectedRun.duration_seconds)} · {selectedRun.time_signature} · {strictnessLabel(selectedRun)}</p></div><div className="flex items-start gap-2"><button type="button" onClick={practiceSelectedRun} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-black"><Play size={15} />Practice This</button><button type="button" disabled={deletingId === selectedRun.id} onClick={() => void removeSelectedRun()} aria-label="Delete practice result" className="rounded-lg border border-red-500/50 p-2 text-red-400 disabled:opacity-50"><Trash2 size={17} /></button>{report && <div className="rounded-lg bg-orange-500/10 px-4 py-2 text-right"><p className="text-xs uppercase tracking-wide text-zinc-500">On Tempo+</p><p className="text-2xl font-semibold text-orange-400">{onTempoPercent}%</p></div>}</div></div>
+        <section className={`rounded-xl border p-5 ${surface}`}>{selectedRun && <><div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-700/60 pb-4"><div><p className="text-xs uppercase tracking-wide text-zinc-500">Practice Review</p><h2 className="mt-1 text-xl font-semibold">{exerciseForRun(selectedRun).name} · {selectedRun.bpm} BPM</h2><p className="mt-1 text-sm text-zinc-500">{selectedRun.project_name ?? "Unassigned project"}{selectedRun.session_name ? ` · ${selectedRun.session_name}` : ""}</p><p className="mt-1 text-sm text-zinc-500">{new Date(selectedRun.completed_at).toLocaleString()} · {formatDuration(selectedRun.duration_seconds)} · {selectedRun.time_signature} · {strictnessLabel(selectedRun)}</p></div><div className="flex items-start gap-2"><button type="button" onClick={practiceSelectedRun} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-black"><Play size={15} />Practice This</button><button type="button" disabled={deletingId === selectedRun.id} onClick={() => void removeSelectedRun()} aria-label="Delete practice result" className="rounded-lg border border-red-500/50 p-2 text-red-400 disabled:opacity-50"><Trash2 size={17} /></button>{report && <div className="rounded-lg bg-orange-500/10 px-4 py-2 text-right"><p className="text-xs uppercase tracking-wide text-zinc-500">On Tempo+</p><p className="text-2xl font-semibold text-orange-400">{onTempoPercent}%</p></div>}</div></div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2"><div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4"><p className="text-xs uppercase tracking-wide text-orange-400">Recommended Next Practice</p><h3 className="mt-2 text-lg font-semibold">{nextStep.title}</h3><p className="mt-2 text-sm leading-relaxed text-zinc-400">{nextStep.detail}</p></div><div className="rounded-xl border border-zinc-700/60 p-4"><p className="text-xs uppercase tracking-wide text-zinc-500">Coach Review</p><p className="mt-2 text-sm leading-relaxed">{coachReview(selectedReview)}</p></div></div>
 

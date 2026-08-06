@@ -3,10 +3,12 @@ import type {
   Subdivision,
   TimeSignature,
 } from "./forgePulseTypes";
+import { defaultPracticeExerciseId, inferLegacyExerciseId, practiceExercises } from "./practiceExerciseCatalog";
 
 const storageKey = "fretforge.forgepulse.preferences";
 
 export type ForgePulsePreferences = {
+  exerciseId: string;
   mode: ForgePulseMode;
   bpm: number;
   subdivision: Subdivision;
@@ -19,6 +21,7 @@ export type ForgePulsePreferences = {
 };
 
 export const defaultForgePulsePreferences: ForgePulsePreferences = {
+  exerciseId: defaultPracticeExerciseId,
   mode: "learn",
   bpm: 120,
   subdivision: "quarter",
@@ -56,6 +59,9 @@ export function loadForgePulsePreferences(): ForgePulsePreferences {
     ];
 
     return {
+      exerciseId: practiceExercises.some((exercise) => exercise.id === stored.exerciseId)
+        ? stored.exerciseId as string
+        : inferLegacyExerciseId(subdivisions.includes(stored.subdivision as Subdivision) ? stored.subdivision as Subdivision : defaultForgePulsePreferences.subdivision),
       mode: modes.includes(stored.mode as ForgePulseMode)
         ? (stored.mode as ForgePulseMode)
         : defaultForgePulsePreferences.mode,
