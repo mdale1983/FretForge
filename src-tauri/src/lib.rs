@@ -1245,24 +1245,10 @@ try {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
-                let position = window.outer_position()?;
-                let size = window.outer_size()?;
-                let intersects_monitor = window.available_monitors()?.iter().any(|monitor| {
-                    let monitor_position = monitor.position();
-                    let monitor_size = monitor.size();
-                    position.x < monitor_position.x + monitor_size.width as i32
-                        && position.x + size.width as i32 > monitor_position.x
-                        && position.y < monitor_position.y + monitor_size.height as i32
-                        && position.y + size.height as i32 > monitor_position.y
-                });
-                if !intersects_monitor {
-                    window.center()?;
-                }
                 window.show()?;
                 window.set_focus()?;
             }
