@@ -22,6 +22,8 @@ export type ForgePulseMode =
   | "follow"
   | "master";
 
+export type TimingStrictness = "relaxed" | "balanced" | "tight";
+
 export type ForgePulseView =
   | "setup"
   | "readiness"

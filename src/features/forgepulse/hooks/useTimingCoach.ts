@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFretForgeLinkState } from "../../../services/studioApplicationService";
-import type { Subdivision, TransportStatus } from "../forgePulseTypes";
+import type { Subdivision, TimingStrictness, TransportStatus } from "../forgePulseTypes";
 
 const stepsPerBeat: Record<Subdivision, number> = {
   whole: 0.25,
@@ -13,7 +13,7 @@ const stepsPerBeat: Record<Subdivision, number> = {
 
 export type TimingBand = "locked" | "great" | "good" | "on-tempo" | "early" | "late";
 type Judgement = TimingBand;
-export type TimingStrictness = "relaxed" | "balanced" | "tight";
+export type { TimingStrictness } from "../forgePulseTypes";
 export type TimingTrend = "calibrating" | "locked-in" | "rushing" | "dragging" | "inconsistent" | "on-time" | "insufficient";
 
 export type TimingCoachState = {

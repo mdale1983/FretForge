@@ -4,7 +4,7 @@ import { ForgePulseSetupView } from "../../features/forgepulse/components/ForgeP
 import { ForgePulseReadinessView } from "../../features/forgepulse/components/ForgePulseReadinessView";
 import { ForgePulseResultsView } from "../../features/forgepulse/components/ForgePulseResultsView";
 import { useMetronome } from "../../features/forgepulse/hooks/useMetronome";
-import { useTimingCoach, type TimingStrictness } from "../../features/forgepulse/hooks/useTimingCoach";
+import { useTimingCoach } from "../../features/forgepulse/hooks/useTimingCoach";
 import { useVoiceCoach, type VoiceCoachFrequency } from "../../features/forgepulse/hooks/useVoiceCoach";
 import {
   deleteForgePulseRun,
@@ -34,6 +34,7 @@ import {
   type TimeSignature,
   type ForgePulseMode,
   type ForgePulseView,
+  type TimingStrictness,
 } from "../../features/forgepulse/forgePulseTypes";
 
 import {
@@ -272,6 +273,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
           subdivision,
           timeSignature,
           durationSeconds,
+		  timingStrictness,
 		  timingReport: timingCoachRef.current ? {
 			scoredCount: timingCoachRef.current.scoredCount,
 			lockedCount: timingCoachRef.current.lockedCount,
@@ -307,6 +309,7 @@ function ForgePulseWorkspace({ theme }: ForgePulseWorkspaceProps) {
       mode,
       subdivision,
       timeSignature,
+      timingStrictness,
     ]
   );
 

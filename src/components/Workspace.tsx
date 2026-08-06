@@ -287,7 +287,7 @@ function Workspace({
 
           {activeModule === "mentor" && (
             <div className="col-span-full">
-              <MentorPortalWorkspace theme={theme} />
+              <MentorPortalWorkspace theme={theme} onOpenForgePulse={() => setActiveModule("pulse")} />
             </div>
           )}
 

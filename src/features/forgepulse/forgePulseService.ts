@@ -3,6 +3,7 @@ import type {
   ForgePulseMode,
   Subdivision,
   TimeSignature,
+  TimingStrictness,
 } from "./forgePulseTypes";
 
 export type ForgePulseRun = {
@@ -16,6 +17,9 @@ export type ForgePulseRun = {
   duration_seconds: number;
   completed_at: string;
 	timing_report_json: string | null;
+  timing_strictness: TimingStrictness | null;
+  project_name?: string | null;
+  session_name?: string | null;
 };
 
 export type ForgePulseTimingReport = {
@@ -50,6 +54,7 @@ type SaveForgePulseRunInput = {
   timeSignature: TimeSignature;
   durationSeconds: number;
 	timingReport: ForgePulseTimingReport | null;
+  timingStrictness: TimingStrictness;
 };
 
 export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
@@ -66,9 +71,10 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
       time_signature,
       duration_seconds,
 	  timing_report_json,
+	  timing_strictness,
       completed_at
     )
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       input.projectId,
@@ -79,6 +85,7 @@ export async function saveForgePulseRun(input: SaveForgePulseRunInput) {
       input.timeSignature,
       input.durationSeconds,
 	  input.timingReport ? JSON.stringify(input.timingReport) : null,
+      input.timingStrictness,
       new Date().toISOString(),
     ]
   );
@@ -89,12 +96,34 @@ export async function getRecentForgePulseRuns(limit = 5) {
 
   return database.select<ForgePulseRun[]>(
     `
-    SELECT *
-    FROM forgepulse_runs
-    ORDER BY completed_at DESC
+    SELECT
+      f.*,
+      p.name AS project_name,
+      s.name AS session_name
+    FROM forgepulse_runs AS f
+    LEFT JOIN projects AS p ON p.id = f.project_id
+    LEFT JOIN sessions AS s ON s.id = f.session_id
+    ORDER BY f.completed_at DESC
     LIMIT ?
     `,
     [limit]
+  );
+}
+
+export async function getForgePulseReviewRuns() {
+  const database = await getDatabase();
+
+  return database.select<ForgePulseRun[]>(
+    `
+    SELECT
+      f.*,
+      p.name AS project_name,
+      s.name AS session_name
+    FROM forgepulse_runs AS f
+    LEFT JOIN projects AS p ON p.id = f.project_id
+    LEFT JOIN sessions AS s ON s.id = f.session_id
+    ORDER BY f.completed_at DESC
+    `
   );
 }
 
