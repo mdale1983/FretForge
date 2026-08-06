@@ -4,7 +4,9 @@ FretForge is a Windows guitar-practice workstation built with Tauri, React, and 
 
 ## Start the development app
 
-Double-click `Start FretForge Dev.cmd` from the repository root. Keep its terminal window open while FretForge is running. Visual Studio is not required.
+Double-click `Start FretForge.vbs` from the repository root to launch FretForge with its development terminal hidden. Visual Studio is not required. Startup output is written to `.fretforge-dev.log` for troubleshooting.
+
+Use `Start FretForge Dev.cmd` when you want to see live build output or diagnose a startup failure.
 
 The first launch installs JavaScript dependencies when they are missing. Rust and the Tauri prerequisites must already be installed on the development computer.
 
